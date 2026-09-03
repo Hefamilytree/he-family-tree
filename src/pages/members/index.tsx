@@ -1,486 +1,395 @@
-import { useState, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { View, Text, ScrollView } from '@tarojs/components';
-import Taro, { useDidShow } from '@tarojs/taro';
-import { Plus, Pencil, Trash2, User as UserIcon, Search } from 'lucide-react-taro';
+import Taro, { useDidShow, useRouter } from '@tarojs/taro';
+import { Users, Plus, Pencil, Trash2, Printer, Search } from 'lucide-react-taro';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { Network } from '@/network';
 
 interface Member {
   id: string;
-  family_id: string;
   name: string;
   gender: string;
+  generation: number;
+  is_alive: string;
   birth_date: string | null;
   death_date: string | null;
   parent_id: string | null;
-  parent_name?: string;
   spouse_name: string | null;
-  generation: number;
   bio: string | null;
-  is_alive: string;
   birth_place: string | null;
-  created_at: string;
 }
 
-const MembersPage = () => {
+export default function Members() {
+  const router = useRouter();
   const [members, setMembers] = useState<Member[]>([]);
-  const [allMembers, setAllMembers] = useState<Member[]>([]);
+  const [filteredMembers, setFilteredMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchText, setSearchText] = useState('');
-  const [showDialog, setShowDialog] = useState(false);
+  const [filterGen, setFilterGen] = useState<number | null>(null);
+  const [showAddForm, setShowAddForm] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
-  const [deletingMember, setDeletingMember] = useState<Member | null>(null);
 
   // 表单状态
   const [formName, setFormName] = useState('');
   const [formGender, setFormGender] = useState('male');
+  const [formGeneration, setFormGeneration] = useState(1);
   const [formBirthDate, setFormBirthDate] = useState('');
   const [formDeathDate, setFormDeathDate] = useState('');
   const [formParentId, setFormParentId] = useState('');
   const [formSpouseName, setFormSpouseName] = useState('');
-  const [formGeneration, setFormGeneration] = useState('1');
   const [formBio, setFormBio] = useState('');
   const [formIsAlive, setFormIsAlive] = useState('yes');
   const [formBirthPlace, setFormBirthPlace] = useState('');
-  const [submitting, setSubmitting] = useState(false);
 
-  const fetchMembers = useCallback(async () => {
+  const loadData = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
       const res = await Network.request({ url: '/api/members' });
-      console.log('members:', res.data);
-      const data = res.data?.data;
-      if (data && Array.isArray(data)) {
-        setMembers(data);
-        setAllMembers(data);
-      }
-    } catch (err) {
-      console.error('Failed to fetch members:', err);
+      console.log('成员数据:', res.data);
+      const list = res.data?.data || [];
+      setMembers(list);
+      setFilteredMembers(list);
+    } catch (e) {
+      console.error('加载成员失败:', e);
     } finally {
       setLoading(false);
     }
-  }, []);
+  };
 
   useDidShow(() => {
-    fetchMembers();
+    loadData();
+    if (router.params.mode === 'add') {
+      setShowAddForm(true);
+    }
   });
 
-  const handleSearch = (text: string) => {
-    setSearchText(text);
-    if (!text.trim()) {
-      setMembers(allMembers);
-    } else {
-      const filtered = allMembers.filter(
-        (m) => m.name.includes(text) || (m.spouse_name && m.spouse_name.includes(text))
-      );
-      setMembers(filtered);
+  // 搜索和筛选
+  useEffect(() => {
+    let result = members;
+    if (searchText) {
+      result = result.filter(m => m.name.includes(searchText));
     }
-  };
+    if (filterGen !== null) {
+      result = result.filter(m => m.generation === filterGen);
+    }
+    setFilteredMembers(result);
+  }, [searchText, filterGen, members]);
+
+  const generations = [...new Set(members.map(m => m.generation))].sort((a, b) => a - b);
 
   const resetForm = () => {
     setFormName('');
     setFormGender('male');
+    setFormGeneration(1);
     setFormBirthDate('');
     setFormDeathDate('');
     setFormParentId('');
     setFormSpouseName('');
-    setFormGeneration('1');
     setFormBio('');
     setFormIsAlive('yes');
     setFormBirthPlace('');
     setEditingMember(null);
   };
 
-  const openAddDialog = () => {
+  const handleAdd = () => {
     resetForm();
-    setShowDialog(true);
+    setShowAddForm(true);
   };
 
-  const openEditDialog = (member: Member) => {
+  const handleEdit = (member: Member) => {
     setEditingMember(member);
     setFormName(member.name);
     setFormGender(member.gender);
+    setFormGeneration(member.generation);
     setFormBirthDate(member.birth_date || '');
     setFormDeathDate(member.death_date || '');
     setFormParentId(member.parent_id || '');
     setFormSpouseName(member.spouse_name || '');
-    setFormGeneration(String(member.generation));
     setFormBio(member.bio || '');
     setFormIsAlive(member.is_alive);
     setFormBirthPlace(member.birth_place || '');
-    setShowDialog(true);
+    setShowAddForm(true);
   };
 
-  const handleSubmit = async () => {
+  const handleSave = async () => {
     if (!formName.trim()) {
       Taro.showToast({ title: '请输入姓名', icon: 'none' });
       return;
     }
     try {
-      setSubmitting(true);
-      const payload = {
-        name: formName.trim(),
+      const familyRes = await Network.request({ url: '/api/family' });
+      const familyId = familyRes.data?.data?.[0]?.id;
+      if (!familyId) {
+        Taro.showToast({ title: '请先创建家族', icon: 'none' });
+        return;
+      }
+
+      const data: any = {
+        name: formName,
         gender: formGender,
+        generation: formGeneration,
+        is_alive: formIsAlive,
         birth_date: formBirthDate || null,
-        death_date: formDeathDate || null,
+        death_date: formIsAlive === 'no' ? (formDeathDate || null) : null,
         parent_id: formParentId || null,
         spouse_name: formSpouseName || null,
-        generation: parseInt(formGeneration) || 1,
         bio: formBio || null,
-        is_alive: formIsAlive,
         birth_place: formBirthPlace || null,
       };
 
       if (editingMember) {
-        const res = await Network.request({
-          url: `/api/members/${editingMember.id}`,
-          method: 'PUT',
-          data: payload,
-        });
-        console.log('update:', res.data);
-        Taro.showToast({ title: '修改成功', icon: 'success' });
+        await Network.request({ url: `/api/members/${editingMember.id}`, method: 'PUT', data });
+        Taro.showToast({ title: '更新成功', icon: 'success' });
       } else {
-        const res = await Network.request({
-          url: '/api/members',
-          method: 'POST',
-          data: payload,
-        });
-        console.log('create:', res.data);
+        await Network.request({ url: '/api/members', method: 'POST', data });
         Taro.showToast({ title: '添加成功', icon: 'success' });
       }
-      setShowDialog(false);
+      setShowAddForm(false);
       resetForm();
-      fetchMembers();
-    } catch (err) {
-      console.error('Submit failed:', err);
-      Taro.showToast({ title: '操作失败', icon: 'none' });
-    } finally {
-      setSubmitting(false);
+      loadData();
+    } catch (e) {
+      console.error('保存失败:', e);
+      Taro.showToast({ title: '保存失败', icon: 'error' });
     }
   };
 
-  const handleDelete = async () => {
-    if (!deletingMember) return;
+  const handleDelete = async (id: string) => {
+    const result = await Taro.showModal({ title: '确认删除', content: '确定要删除这位成员吗？' });
+    if (!result.confirm) return;
     try {
-      const res = await Network.request({
-        url: `/api/members/${deletingMember.id}`,
-        method: 'DELETE',
-      });
-      console.log('delete:', res.data);
-      Taro.showToast({ title: '已删除', icon: 'success' });
-      setDeletingMember(null);
-      fetchMembers();
-    } catch (err) {
-      console.error('Delete failed:', err);
-      Taro.showToast({ title: '删除失败', icon: 'none' });
+      await Network.request({ url: `/api/members/${id}`, method: 'DELETE' });
+      Taro.showToast({ title: '删除成功', icon: 'success' });
+      loadData();
+    } catch (e) {
+      Taro.showToast({ title: '删除失败', icon: 'error' });
     }
   };
 
-  const confirmDelete = (member: Member) => {
-    setDeletingMember(member);
+  const handleExport = () => {
+    Taro.navigateTo({ url: '/pages/export/index' });
   };
 
   return (
-    <ScrollView scrollY className="h-full bg-stone-50">
-      <View className="px-4 py-4 pb-24">
-        {/* 搜索栏 */}
-        <View className="flex items-center gap-2 mb-4">
-          <View className="flex-1 bg-amber-50 rounded-xl px-3 py-2 border border-stone-200">
-            <View style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '8px' }}>
-              <Search size={16} color="#6B5B4F" />
-              <Input
-                className="flex-1 bg-transparent text-sm"
-                placeholder="搜索成员姓名..."
-                value={searchText}
-                onInput={(e) => handleSearch(e.detail.value)}
-              />
-            </View>
+    <View className="min-h-full bg-[#FAF8F5] pb-20">
+      {/* 搜索栏 */}
+      <View className="px-4 pt-4 pb-2">
+        <View className="flex items-center gap-2 mb-3">
+          <View className="flex-1 bg-[#FFFDF7] rounded-lg px-3 py-2 border flex items-center" style={{ borderColor: '#E8E0D8' }}>
+            <Search size={16} color="#999" />
+            <Input
+              className="flex-1 bg-transparent ml-2"
+              placeholder="搜索成员姓名..."
+              value={searchText}
+              onInput={(e) => setSearchText(e.detail.value)}
+            />
           </View>
-          <Button
-            size="sm"
-            className="bg-red-900"
-            onClick={openAddDialog}
-          >
-            <Plus size={16} color="#FFFDF7" />
-            <Text className="text-xs ml-1">添加</Text>
+          <Button size="sm" onClick={handleExport}>
+            <Printer size={16} color="#8B2500" />
           </Button>
         </View>
 
-        {/* 成员列表 */}
-        {loading ? (
-          <View className="flex flex-col gap-3">
-            {[1, 2, 3].map((i) => (
-              <Card key={i} className="bg-amber-50 border-stone-200">
-                <CardContent className="p-4">
-                  <Skeleton className="h-5 w-32 mb-2" />
-                  <Skeleton className="h-4 w-48" />
-                </CardContent>
-              </Card>
+        {/* 世代筛选 */}
+        {generations.length > 0 && (
+          <ScrollView scrollX className="flex gap-2 pb-2">
+            <View
+              className="px-3 py-1 rounded-full whitespace-nowrap"
+              style={{ backgroundColor: filterGen === null ? '#8B2500' : '#FFFDF7', color: filterGen === null ? '#FFFDF7' : '#6B5B4F' }}
+              onClick={() => setFilterGen(null)}
+            >
+              <Text className="text-xs">全部</Text>
+            </View>
+            {generations.map(gen => (
+              <View
+                key={gen}
+                className="px-3 py-1 rounded-full whitespace-nowrap"
+                style={{ backgroundColor: filterGen === gen ? '#8B2500' : '#FFFDF7', color: filterGen === gen ? '#FFFDF7' : '#6B5B4F' }}
+                onClick={() => setFilterGen(gen)}
+              >
+                <Text className="text-xs">第{gen}世</Text>
+              </View>
             ))}
+          </ScrollView>
+        )}
+      </View>
+
+      {/* 添加/编辑表单 */}
+      {showAddForm && (
+        <View className="px-4 mb-4">
+          <Card className="border-2" style={{ borderColor: '#8B2500' }}>
+            <CardContent className="p-4">
+              <Text className="block text-lg font-bold mb-4" style={{ color: '#8B2500' }}>
+                {editingMember ? '编辑成员' : '添加成员'}
+              </Text>
+
+              <View className="mb-3">
+                <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>姓名 *</Text>
+                <View className="bg-[#FFFDF7] rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
+                  <Input className="w-full bg-transparent" placeholder="请输入姓名" value={formName} onInput={(e) => setFormName(e.detail.value)} />
+                </View>
+              </View>
+
+              <View className="flex gap-3 mb-3">
+                <View className="flex-1">
+                  <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>性别</Text>
+                  <View className="flex gap-2">
+                    <View className="flex-1 px-3 py-2 rounded-lg text-center" style={{ backgroundColor: formGender === 'male' ? '#E3F2FD' : '#FFFDF7', color: formGender === 'male' ? '#1565C0' : '#6B5B4F' }} onClick={() => setFormGender('male')}>
+                      <Text className="text-sm">男</Text>
+                    </View>
+                    <View className="flex-1 px-3 py-2 rounded-lg text-center" style={{ backgroundColor: formGender === 'female' ? '#FCE4EC' : '#FFFDF7', color: formGender === 'female' ? '#C62828' : '#6B5B4F' }} onClick={() => setFormGender('female')}>
+                      <Text className="text-sm">女</Text>
+                    </View>
+                  </View>
+                </View>
+                <View className="flex-1">
+                  <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>世代</Text>
+                  <View className="bg-[#FFFDF7] rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
+                    <Input className="w-full bg-transparent" type="number" placeholder="世代数" value={String(formGeneration)} onInput={(e) => setFormGeneration(Number(e.detail.value))} />
+                  </View>
+                </View>
+              </View>
+
+              <View className="flex gap-3 mb-3">
+                <View className="flex-1">
+                  <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>出生日期</Text>
+                  <View className="bg-[#FFFDF7] rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
+                    <Input className="w-full bg-transparent" placeholder="如：1950" value={formBirthDate} onInput={(e) => setFormBirthDate(e.detail.value)} />
+                  </View>
+                </View>
+                <View className="flex-1">
+                  <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>状态</Text>
+                  <View className="flex gap-2">
+                    <View className="flex-1 px-3 py-2 rounded-lg text-center" style={{ backgroundColor: formIsAlive === 'yes' ? '#E8F5E9' : '#FFFDF7', color: formIsAlive === 'yes' ? '#2E7D32' : '#6B5B4F' }} onClick={() => setFormIsAlive('yes')}>
+                      <Text className="text-sm">健在</Text>
+                    </View>
+                    <View className="flex-1 px-3 py-2 rounded-lg text-center" style={{ backgroundColor: formIsAlive === 'no' ? '#FFEBEE' : '#FFFDF7', color: formIsAlive === 'no' ? '#C62828' : '#6B5B4F' }} onClick={() => setFormIsAlive('no')}>
+                      <Text className="text-sm">已故</Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+
+              {formIsAlive === 'no' && (
+                <View className="mb-3">
+                  <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>逝世日期</Text>
+                  <View className="bg-[#FFFDF7] rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
+                    <Input className="w-full bg-transparent" placeholder="如：2020" value={formDeathDate} onInput={(e) => setFormDeathDate(e.detail.value)} />
+                  </View>
+                </View>
+              )}
+
+              <View className="mb-3">
+                <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>配偶姓名</Text>
+                <View className="bg-[#FFFDF7] rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
+                  <Input className="w-full bg-transparent" placeholder="请输入配偶姓名" value={formSpouseName} onInput={(e) => setFormSpouseName(e.detail.value)} />
+                </View>
+              </View>
+
+              <View className="mb-3">
+                <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>出生地</Text>
+                <View className="bg-[#FFFDF7] rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
+                  <Input className="w-full bg-transparent" placeholder="请输入出生地" value={formBirthPlace} onInput={(e) => setFormBirthPlace(e.detail.value)} />
+                </View>
+              </View>
+
+              <View className="mb-4">
+                <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>简介</Text>
+                <View className="bg-[#FFFDF7] rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
+                  <Input className="w-full bg-transparent" placeholder="请输入简介" value={formBio} onInput={(e) => setFormBio(e.detail.value)} />
+                </View>
+              </View>
+
+              <View className="flex gap-3">
+                <Button className="flex-1" variant="outline" onClick={() => { setShowAddForm(false); resetForm(); }}>
+                  <Text>取消</Text>
+                </Button>
+                <Button className="flex-1" style={{ backgroundColor: '#8B2500', color: '#FFFDF7' }} onClick={handleSave}>
+                  <Text>{editingMember ? '更新' : '添加'}</Text>
+                </Button>
+              </View>
+            </CardContent>
+          </Card>
+        </View>
+      )}
+
+      {/* 添加按钮 */}
+      {!showAddForm && (
+        <View className="px-4 mb-4">
+          <Button className="w-full" style={{ backgroundColor: '#8B2500', color: '#FFFDF7' }} onClick={handleAdd}>
+            <Plus size={16} color="#FFFDF7" />
+            <Text className="ml-2">添加成员</Text>
+          </Button>
+        </View>
+      )}
+
+      {/* 成员列表 */}
+      <View className="px-4">
+        {loading ? (
+          <View className="space-y-3">
+            {[1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full" />)}
           </View>
-        ) : members.length > 0 ? (
-          <View className="flex flex-col gap-3">
-            {members.map((member) => (
-              <Card key={member.id} className="bg-amber-50 border-stone-200">
+        ) : filteredMembers.length === 0 ? (
+          <Card>
+            <CardContent className="p-8 text-center">
+              <Users size={48} color="#CCC" className="mx-auto mb-3" />
+              <Text className="block text-gray-400 text-base">暂无成员数据</Text>
+            </CardContent>
+          </Card>
+        ) : (
+          <View className="space-y-3">
+            {filteredMembers.map(member => (
+              <Card key={member.id} className="overflow-hidden">
                 <CardContent className="p-4">
-                  <View className="flex items-center justify-between">
+                  <View className="flex items-start justify-between">
                     <View className="flex items-center gap-3 flex-1">
-                      <View
-                        className={`w-12 h-12 rounded-full flex items-center justify-center border-2 ${
-                          member.gender === 'male'
-                            ? 'border-red-900'
-                            : 'border-yellow-700'
-                        }`}
-                      >
-                        <UserIcon
-                          size={20}
-                          color={member.gender === 'male' ? '#8B2500' : '#B8860B'}
-                        />
+                      <View className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: member.gender === 'male' ? '#E3F2FD' : '#FCE4EC' }}>
+                        <Text className="text-lg font-bold" style={{ color: member.gender === 'male' ? '#1565C0' : '#C62828' }}>
+                          {member.name.charAt(0)}
+                        </Text>
                       </View>
                       <View className="flex-1">
-                        <Text className="block text-base font-semibold text-stone-800">
-                          {member.name}
+                        <View className="flex items-center gap-2 mb-1">
+                          <Text className="text-base font-bold" style={{ color: '#333' }}>{member.name}</Text>
+                          <Text className="text-xs px-2 py-1 rounded" style={{ backgroundColor: member.gender === 'male' ? '#E3F2FD' : '#FCE4EC', color: member.gender === 'male' ? '#1565C0' : '#C62828' }}>
+                            {member.gender === 'male' ? '男' : '女'}
+                          </Text>
+                          <Text className="text-xs px-2 py-1 rounded" style={{ backgroundColor: '#FFF5F0', color: '#8B2500' }}>
+                            第{member.generation}世
+                          </Text>
+                        </View>
+                        <Text className="block text-xs" style={{ color: '#999' }}>
+                          {member.birth_date || '未知'}
+                          {member.death_date ? ` - ${member.death_date}` : member.is_alive === 'yes' ? ' - 健在' : ' - 已故'}
                         </Text>
-                        <Text className="block text-sm text-stone-500">
-                          第{member.generation}世 · {member.gender === 'male' ? '男' : '女'} · {member.is_alive === 'yes' ? '在世' : '已故'}
-                        </Text>
-                        {member.parent_name && (
-                          <Text className="block text-xs text-stone-400">
-                            父: {member.parent_name}
+                        {member.spouse_name && (
+                          <Text className="block text-xs mt-1" style={{ color: '#6B5B4F' }}>
+                            配偶：{member.spouse_name}
                           </Text>
                         )}
-                        {member.spouse_name && (
-                          <Text className="block text-xs text-stone-400">
-                            配偶: {member.spouse_name}
+                        {member.birth_place && (
+                          <Text className="block text-xs" style={{ color: '#6B5B4F' }}>
+                            出生地：{member.birth_place}
                           </Text>
                         )}
                       </View>
                     </View>
                     <View className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => openEditDialog(member)}
-                      >
-                        <Pencil size={16} color="#6B5B4F" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => confirmDelete(member)}
-                      >
-                        <Trash2 size={16} color="#A0522D" />
-                      </Button>
+                      <View onClick={() => handleEdit(member)} className="p-2 rounded-lg" style={{ backgroundColor: '#FFF5F0' }}>
+                        <Pencil size={16} color="#8B2500" />
+                      </View>
+                      <View onClick={() => handleDelete(member.id)} className="p-2 rounded-lg" style={{ backgroundColor: '#FFEBEE' }}>
+                        <Trash2 size={16} color="#C62828" />
+                      </View>
                     </View>
                   </View>
                 </CardContent>
               </Card>
             ))}
           </View>
-        ) : (
-          <Card className="bg-amber-50 border-stone-200">
-            <CardContent className="p-8 flex flex-col items-center">
-              <UserIcon size={48} color="#D4C5B9" />
-              <Text className="block text-base text-stone-500 mt-3 text-center">
-                {searchText ? '未找到匹配的成员' : '暂无成员'}
-              </Text>
-              {!searchText && (
-                <Button className="mt-4 bg-red-900" onClick={openAddDialog}>
-                  <Plus size={16} color="#FFFDF7" />
-                  <Text className="text-sm ml-1">添加第一位成员</Text>
-                </Button>
-              )}
-            </CardContent>
-          </Card>
         )}
       </View>
-
-      {/* 添加/编辑弹窗 */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-h-screen overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {editingMember ? '编辑成员' : '添加成员'}
-            </DialogTitle>
-          </DialogHeader>
-          <ScrollView scrollY className="max-h-96">
-            <View className="flex flex-col gap-4 py-2">
-              <View>
-                <Text className="block text-sm text-stone-600 mb-1">姓名 *</Text>
-                <View className="bg-stone-50 rounded-xl px-3 py-2 border border-stone-200">
-                  <Input
-                    className="w-full bg-transparent"
-                    placeholder="请输入姓名"
-                    value={formName}
-                    onInput={(e) => setFormName(e.detail.value)}
-                  />
-                </View>
-              </View>
-
-              <View>
-                <Text className="block text-sm text-stone-600 mb-1">性别</Text>
-                <Select value={formGender} onValueChange={setFormGender}>
-                  <SelectTrigger className="bg-stone-50 border-stone-200">
-                    <SelectValue placeholder="选择性别" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="male">男</SelectItem>
-                    <SelectItem value="female">女</SelectItem>
-                  </SelectContent>
-                </Select>
-              </View>
-
-              <View>
-                <Text className="block text-sm text-stone-600 mb-1">世代</Text>
-                <View className="bg-stone-50 rounded-xl px-3 py-2 border border-stone-200">
-                  <Input
-                    className="w-full bg-transparent"
-                    placeholder="第几世"
-                    value={formGeneration}
-                    onInput={(e) => setFormGeneration(e.detail.value)}
-                  />
-                </View>
-              </View>
-
-              <View>
-                <Text className="block text-sm text-stone-600 mb-1">在世状态</Text>
-                <Select value={formIsAlive} onValueChange={setFormIsAlive}>
-                  <SelectTrigger className="bg-stone-50 border-stone-200">
-                    <SelectValue placeholder="选择状态" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="yes">在世</SelectItem>
-                    <SelectItem value="no">已故</SelectItem>
-                  </SelectContent>
-                </Select>
-              </View>
-
-              <View>
-                <Text className="block text-sm text-stone-600 mb-1">出生日期</Text>
-                <View className="bg-stone-50 rounded-xl px-3 py-2 border border-stone-200">
-                  <Input
-                    className="w-full bg-transparent"
-                    placeholder="如: 1950-01-01 或 农历庚寅年"
-                    value={formBirthDate}
-                    onInput={(e) => setFormBirthDate(e.detail.value)}
-                  />
-                </View>
-              </View>
-
-              {formIsAlive === 'no' && (
-                <View>
-                  <Text className="block text-sm text-stone-600 mb-1">去世日期</Text>
-                  <View className="bg-stone-50 rounded-xl px-3 py-2 border border-stone-200">
-                    <Input
-                      className="w-full bg-transparent"
-                      placeholder="如: 2020-06-15"
-                      value={formDeathDate}
-                      onInput={(e) => setFormDeathDate(e.detail.value)}
-                    />
-                  </View>
-                </View>
-              )}
-
-              <View>
-                <Text className="block text-sm text-stone-600 mb-1">父亲（关联上一代）</Text>
-                <Select value={formParentId} onValueChange={setFormParentId}>
-                  <SelectTrigger className="bg-stone-50 border-stone-200">
-                    <SelectValue placeholder="选择父亲（可选）" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">无</SelectItem>
-                    {allMembers
-                      .filter((m) => !editingMember || m.id !== editingMember.id)
-                      .map((m) => (
-                        <SelectItem key={m.id} value={m.id}>
-                          {m.name}（第{m.generation}世）
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </View>
-
-              <View>
-                <Text className="block text-sm text-stone-600 mb-1">配偶姓名</Text>
-                <View className="bg-stone-50 rounded-xl px-3 py-2 border border-stone-200">
-                  <Input
-                    className="w-full bg-transparent"
-                    placeholder="请输入配偶姓名"
-                    value={formSpouseName}
-                    onInput={(e) => setFormSpouseName(e.detail.value)}
-                  />
-                </View>
-              </View>
-
-              <View>
-                <Text className="block text-sm text-stone-600 mb-1">出生地</Text>
-                <View className="bg-stone-50 rounded-xl px-3 py-2 border border-stone-200">
-                  <Input
-                    className="w-full bg-transparent"
-                    placeholder="请输入出生地"
-                    value={formBirthPlace}
-                    onInput={(e) => setFormBirthPlace(e.detail.value)}
-                  />
-                </View>
-              </View>
-
-              <View>
-                <Text className="block text-sm text-stone-600 mb-1">简介/事迹</Text>
-                <View className="bg-stone-50 rounded-xl p-3 border border-stone-200">
-                  <Textarea
-                    style={{ width: '100%', minHeight: '80px', backgroundColor: 'transparent' }}
-                    placeholder="记录成员的生平事迹..."
-                    value={formBio}
-                    onInput={(e) => setFormBio(e.detail.value)}
-                    maxlength={500}
-                  />
-                </View>
-              </View>
-            </View>
-          </ScrollView>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDialog(false)}>
-              取消
-            </Button>
-            <Button className="bg-red-900" onClick={handleSubmit} disabled={submitting}>
-              {submitting ? '提交中...' : editingMember ? '保存修改' : '确认添加'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* 删除确认弹窗 */}
-      <Dialog open={!!deletingMember} onOpenChange={(open) => !open && setDeletingMember(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>确认删除</DialogTitle>
-          </DialogHeader>
-          <View className="py-4">
-            <Text className="block text-base text-stone-600">
-              确定要删除成员&ldquo;{deletingMember?.name}&rdquo;吗？此操作不可撤销。
-            </Text>
-            <Text className="block text-sm text-stone-400 mt-2">
-              删除后，该成员的子代成员的父级关联将被清除。
-            </Text>
-          </View>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeletingMember(null)}>
-              取消
-            </Button>
-            <Button className="bg-red-800" onClick={handleDelete}>
-              确认删除
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </ScrollView>
+    </View>
   );
-};
-
-export default MembersPage;
+}

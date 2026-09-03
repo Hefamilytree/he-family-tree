@@ -25,7 +25,67 @@ export const families = pgTable(
   ]
 );
 
-// 家族成员表
+// 文化传承内容表（家风家训、家族荣誉、功德贡献、迁徙轨迹、家族事记、人物事记）
+export const cultural_heritage = pgTable(
+  "cultural_heritage",
+  {
+    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+    family_id: varchar("family_id", { length: 36 }).notNull().references(() => families.id, { onDelete: "cascade" }),
+    category: varchar("category", { length: 50 }).notNull(), // family_motto, honor, merit, migration, family_history, person_history
+    title: varchar("title", { length: 200 }).notNull(),
+    content: text("content"),
+    sort_order: integer("sort_order").default(0),
+    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp("updated_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("cultural_heritage_family_id_idx").on(table.family_id),
+    index("cultural_heritage_category_idx").on(table.category),
+  ]
+);
+
+// 和睦亲族活动表（活动组织、祭祖、成人礼、立贤、敬老、助学、纾困）
+export const harmony_activities = pgTable(
+  "harmony_activities",
+  {
+    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+    family_id: varchar("family_id", { length: 36 }).notNull().references(() => families.id, { onDelete: "cascade" }),
+    category: varchar("category", { length: 50 }).notNull(), // activity, ancestor_worship, coming_of_age, talent, elderly_care, education, relief
+    title: varchar("title", { length: 200 }).notNull(),
+    content: text("content"),
+    event_date: varchar("event_date", { length: 50 }),
+    location: varchar("location", { length: 200 }),
+    sort_order: integer("sort_order").default(0),
+    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp("updated_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("harmony_activities_family_id_idx").on(table.family_id),
+    index("harmony_activities_category_idx").on(table.category),
+  ]
+);
+
+// 发展经济信息表（通讯录、附件宗亲、企业家圈、供需信息、产品展示）
+export const economic_development = pgTable(
+  "economic_development",
+  {
+    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+    family_id: varchar("family_id", { length: 36 }).notNull().references(() => families.id, { onDelete: "cascade" }),
+    category: varchar("category", { length: 50 }).notNull(), // contact, relative, entrepreneur, supply_demand, product
+    title: varchar("title", { length: 200 }).notNull(),
+    content: text("content"),
+    contact_name: varchar("contact_name", { length: 100 }),
+    contact_phone: varchar("contact_phone", { length: 50 }),
+    member_id: varchar("member_id", { length: 36 }),
+    sort_order: integer("sort_order").default(0),
+    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp("updated_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("economic_development_family_id_idx").on(table.family_id),
+    index("economic_development_category_idx").on(table.category),
+  ]
+);
 export const members = pgTable(
   "members",
   {
