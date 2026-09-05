@@ -7,9 +7,12 @@ import { MembersModule } from '@/members/members.module';
 import { CulturalModule } from '@/cultural/cultural.module';
 import { HarmonyModule } from '@/harmony/harmony.module';
 import { EconomicModule } from '@/economic/economic.module';
+import { CommentsModule } from '@/comments/comments.module';
+import { RegistrationsModule } from '@/registrations/registrations.module';
+import { SpousesModule } from '@/spouses/spouses.module';
 
 @Module({
-  imports: [AuthModule, FamilyModule, MembersModule, CulturalModule, HarmonyModule, EconomicModule],
+  imports: [AuthModule, FamilyModule, MembersModule, CulturalModule, HarmonyModule, EconomicModule, CommentsModule, RegistrationsModule, SpousesModule],
   controllers: [AppController],
   providers: [AppService],
 })

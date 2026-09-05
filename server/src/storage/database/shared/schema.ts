@@ -131,3 +131,53 @@ export const users = pgTable(
     index("users_family_id_idx").on(table.family_id),
   ]
 );
+
+// 评论表
+export const comments = pgTable(
+  "comments",
+  {
+    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+    target_type: varchar("target_type", { length: 50 }).notNull(),
+    target_id: varchar("target_id", { length: 36 }).notNull(),
+    user_id: varchar("user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+    content: text("content").notNull(),
+    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("comments_target_idx").on(table.target_type, table.target_id),
+  ]
+);
+
+// 报名表
+export const registrations = pgTable(
+  "registrations",
+  {
+    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+    activity_id: varchar("activity_id", { length: 36 }).notNull().references(() => harmony_activities.id, { onDelete: "cascade" }),
+    user_id: varchar("user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+    member_name: varchar("member_name", { length: 100 }),
+    phone: varchar("phone", { length: 50 }),
+    note: text("note"),
+    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("registrations_activity_id_idx").on(table.activity_id),
+  ]
+);
+
+// 配偶表
+export const spouses = pgTable(
+  "spouses",
+  {
+    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+    member_id: varchar("member_id", { length: 36 }).notNull().references(() => members.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 100 }).notNull(),
+    status: varchar("status", { length: 20 }).notNull().default("alive"),
+    birth_date: varchar("birth_date", { length: 20 }),
+    death_date: varchar("death_date", { length: 20 }),
+    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("spouses_member_id_idx").on(table.member_id),
+  ]
+);

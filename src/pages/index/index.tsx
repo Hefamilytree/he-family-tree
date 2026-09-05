@@ -29,16 +29,16 @@ const UNIT_SECTIONS = [
     bgColor: '#FFF5F0',
     items: [
       { key: 'family_motto', name: '家风家训', icon: ScrollText },
-      { key: 'honor', name: '家族荣誉', icon: Award },
-      { key: 'merit', name: '功德贡献', icon: Heart },
+      { key: 'honor', name: '家族字辈', icon: Award },
+      { key: 'merit', name: '家史', icon: Heart },
       { key: 'migration', name: '迁徙轨迹', icon: MapPin },
       { key: 'family_history', name: '家族事记', icon: BookOpen },
-      { key: 'person_history', name: '人物事记', icon: CircleUser },
+      { key: 'person_history', name: '前言', icon: CircleUser },
     ]
   },
   {
     id: 'harmony',
-    title: '和睦亲族',
+    title: '孝亲睦族',
     color: '#2E7D32',
     bgColor: '#F0FFF4',
     items: [
@@ -57,7 +57,7 @@ const UNIT_SECTIONS = [
     color: '#1565C0',
     bgColor: '#F0F7FF',
     items: [
-      { key: 'contact', name: '通讯录', icon: Phone },
+      { key: 'contact', name: '字辈', icon: Phone },
       { key: 'relative', name: '附近宗亲', icon: Users },
       { key: 'entrepreneur', name: '企业家圈', icon: Briefcase },
       { key: 'supply_demand', name: '供需信息', icon: MessageSquare },
