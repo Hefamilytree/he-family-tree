@@ -58,7 +58,7 @@ const UNIT_SECTIONS = [
     bgColor: '#F0F7FF',
     items: [
       { key: 'contact', name: '通讯录', icon: Phone },
-      { key: 'relative', name: '附件宗亲', icon: Users },
+      { key: 'relative', name: '附近宗亲', icon: Users },
       { key: 'entrepreneur', name: '企业家圈', icon: Briefcase },
       { key: 'supply_demand', name: '供需信息', icon: MessageSquare },
       { key: 'product', name: '产品展示', icon: ShoppingBag },

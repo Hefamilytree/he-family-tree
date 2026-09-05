@@ -1,6 +1,6 @@
 import { View, Text, ScrollView } from '@tarojs/components';
 import Taro from '@tarojs/taro';
-import { User, TreePine, Info, Heart } from 'lucide-react-taro';
+import { User, TreePine, Info, Heart, MapPin } from 'lucide-react-taro';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 
@@ -19,6 +19,39 @@ const ProfilePage = () => {
       title: '提示',
       content: '此功能需要联系管理员进行数据清理。',
       showCancel: false,
+    });
+  };
+
+  const handleRootSeeking = () => {
+    Taro.showModal({
+      title: '寻根问祖',
+      content: '即将跳转到「中华家谱」小程序，探索更多家族文化资源。',
+      confirmText: '前往',
+      cancelText: '取消',
+      success: (res) => {
+        if (res.confirm) {
+          // 跳转到其他小程序（示例：中华家谱小程序）
+          // 实际使用时需要替换为真实的小程序 AppID
+          Taro.navigateToMiniProgram({
+            appId: 'wx1234567890abcdef', // 替换为目标小程序的 AppID
+            path: 'pages/index/index',
+            extraData: {
+              from: 'he-family-tree',
+            },
+            envVersion: 'release', // release=正式版, trial=体验版, develop=开发版
+            success: () => {
+              console.log('跳转成功');
+            },
+            fail: (err) => {
+              console.error('跳转失败:', err);
+              Taro.showToast({
+                title: '跳转失败，请检查小程序 AppID',
+                icon: 'none',
+              });
+            },
+          });
+        }
+      },
     });
   };
 
@@ -56,6 +89,25 @@ const ProfilePage = () => {
                 </Text>
                 <Text className="block text-sm text-stone-500">
                   查看应用介绍和使用说明
+                </Text>
+              </View>
+            </CardContent>
+          </Card>
+
+          <Card
+            className="bg-amber-50 border-stone-200 active:opacity-80"
+            onClick={handleRootSeeking}
+          >
+            <CardContent className="p-4 flex items-center gap-3">
+              <View className="w-10 h-10 rounded-full bg-amber-700 flex items-center justify-center">
+                <MapPin size={20} color="#FFFDF7" />
+              </View>
+              <View className="flex-1">
+                <Text className="block text-base font-semibold text-stone-800">
+                  寻根问祖
+                </Text>
+                <Text className="block text-sm text-stone-500">
+                  链接更多家谱资源，探索家族起源
                 </Text>
               </View>
             </CardContent>
