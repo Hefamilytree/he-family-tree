@@ -111,3 +111,23 @@ export const members = pgTable(
     index("members_generation_idx").on(table.generation),
   ]
 );
+
+// 用户表
+export const users = pgTable(
+  "users",
+  {
+    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+    username: varchar("username", { length: 100 }).notNull().unique(),
+    password_hash: varchar("password_hash", { length: 255 }).notNull(),
+    role: varchar("role", { length: 20 }).notNull().default("member"),
+    family_id: varchar("family_id", { length: 36 }).references(() => families.id, { onDelete: "set null" }),
+    nickname: varchar("nickname", { length: 100 }),
+    avatar_url: text("avatar_url"),
+    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp("updated_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("users_username_idx").on(table.username),
+    index("users_family_id_idx").on(table.family_id),
+  ]
+);

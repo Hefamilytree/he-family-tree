@@ -7,7 +7,9 @@ export default defineAppConfig({
     'pages/section-detail/index',
     'pages/section-edit/index',
     'pages/export/index',
-    'pages/export-preview/index'
+    'pages/export-preview/index',
+    'pages/login/index',
+    'pages/register/index'
   ],
   window: {
     backgroundTextStyle: 'light',
