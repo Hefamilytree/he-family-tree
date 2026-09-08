@@ -9,7 +9,8 @@ export default defineAppConfig({
     'pages/export/index',
     'pages/export-preview/index',
     'pages/login/index',
-    'pages/register/index'
+    'pages/register/index',
+    'pages/birthdays/index'
   ],
   window: {
     backgroundTextStyle: 'light',

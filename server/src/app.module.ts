@@ -10,9 +10,11 @@ import { EconomicModule } from '@/economic/economic.module';
 import { CommentsModule } from '@/comments/comments.module';
 import { RegistrationsModule } from '@/registrations/registrations.module';
 import { SpousesModule } from '@/spouses/spouses.module';
+import { UploadModule } from '@/upload/upload.module';
 
 @Module({
-  imports: [AuthModule, FamilyModule, MembersModule, CulturalModule, HarmonyModule, EconomicModule, CommentsModule, RegistrationsModule, SpousesModule],
+  imports: [AuthModule, FamilyModule, MembersModule, CulturalModule, HarmonyModule, EconomicModule,
+    UploadModule, CommentsModule, RegistrationsModule, SpousesModule],
   controllers: [AppController],
   providers: [AppService],
 })

@@ -3,7 +3,7 @@ import { View, Text } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import {
   ScrollText, Award, Heart, MapPin, BookOpen, CircleUser,
-  Calendar, Flame, Crown, Star, HeartHandshake, GraduationCap, HandHeart,
+  Calendar, Flame, Crown, Star, HeartHandshake, GraduationCap, HandHeart, Cake,
   Phone, Users, Briefcase, MessageSquare, ShoppingBag
 } from 'lucide-react-taro';
 import { Card, CardContent } from '@/components/ui/card';
@@ -49,6 +49,7 @@ const UNIT_SECTIONS = [
       { key: 'elderly_care', name: '敬老', icon: HeartHandshake },
       { key: 'education', name: '助学', icon: GraduationCap },
       { key: 'relief', name: '纾困', icon: HandHeart },
+      { key: 'birthday', name: '生日提醒', icon: Cake },
     ]
   },
   {
@@ -87,6 +88,12 @@ export default function Index() {
   useDidShow(() => { loadFamily(); });
 
   const handleSectionClick = (sectionId: string, itemKey: string, itemName: string) => {
+    if (itemKey === 'birthday') {
+      Taro.navigateTo({
+        url: '/pages/birthdays/index'
+      });
+      return;
+    }
     Taro.navigateTo({
       url: `/pages/section-detail/index?section=${sectionId}&category=${itemKey}&title=${encodeURIComponent(itemName)}`
     });
