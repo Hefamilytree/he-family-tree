@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import {
-  ScrollText, Award, Heart, MapPin, BookOpen, CircleUser,
+  ScrollText, Award, Heart, MapPin, BookOpen, CircleUser, Feather, NotebookPen,
   Calendar, Flame, Crown, Star, HeartHandshake, GraduationCap, HandHeart, Cake,
   Phone, Users, Briefcase, MessageSquare, ShoppingBag
 } from 'lucide-react-taro';
@@ -34,6 +34,8 @@ const UNIT_SECTIONS = [
       { key: 'migration', name: '迁徙轨迹', icon: MapPin },
       { key: 'family_history', name: '家族事记', icon: BookOpen },
       { key: 'person_history', name: '前言', icon: CircleUser },
+      { key: 'afterword', name: '后记', icon: Feather },
+      { key: 'editorial_note', name: '编写说明', icon: NotebookPen },
     ]
   },
   {
@@ -76,8 +78,8 @@ export default function Index() {
     try {
       const res = await Network.request({ url: '/api/family' });
       console.log('家族数据:', res.data);
-      const list = res.data?.data || [];
-      setFamily(list.length > 0 ? list[0] : null);
+      const payload = res.data?.data;
+      setFamily(Array.isArray(payload) ? (payload.length > 0 ? payload[0] : null) : (payload || null));
     } catch (e) {
       console.error('加载家族失败:', e);
     } finally {

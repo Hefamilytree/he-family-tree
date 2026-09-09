@@ -31,7 +31,7 @@ export const cultural_heritage = pgTable(
   {
     id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
     family_id: varchar("family_id", { length: 36 }).notNull().references(() => families.id, { onDelete: "cascade" }),
-    category: varchar("category", { length: 50 }).notNull(), // family_motto, honor, merit, migration, family_history, person_history
+    category: varchar("category", { length: 50 }).notNull(), // family_motto, honor, merit, migration, family_history, person_history, afterword, editorial_note
     title: varchar("title", { length: 200 }).notNull(),
     content: text("content"),
     sort_order: integer("sort_order").default(0),

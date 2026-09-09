@@ -30,6 +30,31 @@ interface Member {
   birth_place: string | null;
 }
 
+interface CulturalItem {
+  id: string;
+  category: string;
+  title: string;
+  content: string | null;
+  sort_order?: number;
+}
+
+// 族谱卷首文化内容顺序：前言、家史、家风家训、家族字辈、家族事记
+const FRONT_CULTURAL_ORDER = [
+  { key: 'person_history', label: '前言' },
+  { key: 'merit', label: '家史' },
+  { key: 'family_motto', label: '家风家训' },
+  { key: 'honor', label: '家族字辈' },
+  { key: 'family_history', label: '家族事记' },
+];
+
+// 族谱卷末文化内容顺序：后记、编写说明
+const BACK_CULTURAL_ORDER = [
+  { key: 'afterword', label: '后记' },
+  { key: 'editorial_note', label: '编写说明' },
+];
+
+const KAI_FONT = 'STKaiti, KaiTi, serif';
+
 export default function ExportPreview() {
   const router = useRouter();
   const mode = router.params.mode || 'full';
@@ -37,17 +62,19 @@ export default function ExportPreview() {
 
   const [family, setFamily] = useState<FamilyInfo | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
+  const [culturalItems, setCulturalItems] = useState<CulturalItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [familyRes, membersRes] = await Promise.all([
+      const [familyRes, membersRes, culturalRes] = await Promise.all([
         Network.request({ url: '/api/family' }),
         Network.request({ url: '/api/members' }),
+        Network.request({ url: '/api/cultural' }),
       ]);
-      const familyList = familyRes.data?.data || [];
-      setFamily(familyList.length > 0 ? familyList[0] : null);
+      const familyPayload = familyRes.data?.data;
+      setFamily(Array.isArray(familyPayload) ? (familyPayload.length > 0 ? familyPayload[0] : null) : (familyPayload || null));
 
       let memberList = membersRes.data?.data || [];
       // 如果是分支模式，只获取该分支的成员
@@ -67,6 +94,10 @@ export default function ExportPreview() {
         memberList = branchMembers;
       }
       setMembers(memberList);
+
+      const culturalList: CulturalItem[] = culturalRes.data?.data || [];
+      console.log('文化传承数据:', culturalList);
+      setCulturalItems(culturalList);
     } catch (e) {
       console.error('加载数据失败:', e);
     } finally {
@@ -75,6 +106,51 @@ export default function ExportPreview() {
   };
 
   useDidShow(() => { loadData(); });
+
+  // 按指定顺序分组文化内容
+  const groupCultural = (order: { key: string; label: string }[]) => {
+    return order
+      .map(section => ({
+        ...section,
+        items: culturalItems
+          .filter(item => item.category === section.key)
+          .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
+      }))
+      .filter(section => section.items.length > 0);
+  };
+
+  const frontSections = groupCultural(FRONT_CULTURAL_ORDER);
+  const backSections = groupCultural(BACK_CULTURAL_ORDER);
+
+  // 渲染文化板块（楷体毛笔字）
+  const renderCulturalSections = (sections: { key: string; label: string; items: CulturalItem[] }[]) => {
+    return sections.map(section => (
+      <View key={section.key} className="mb-6">
+        <View className="flex items-center mb-3">
+          <View className="px-4 py-1 rounded" style={{ backgroundColor: '#8B2500' }}>
+            <Text className="text-base font-bold" style={{ color: '#FFFDF7', fontFamily: KAI_FONT }}>
+              {section.label}
+            </Text>
+          </View>
+          <View className="flex-1 h-px ml-3" style={{ backgroundColor: '#8B2500' }} />
+        </View>
+        <View className="space-y-3">
+          {section.items.map(item => (
+            <View key={item.id} className="p-4 rounded-lg" style={{ backgroundColor: '#FFFDF7', border: '1px solid #E8E0D8' }}>
+              <Text className="block text-lg font-bold mb-2" style={{ color: '#333', fontFamily: KAI_FONT }}>
+                {item.title}
+              </Text>
+              {item.content && (
+                <Text className="block text-sm leading-relaxed" style={{ color: '#6B5B4F', fontFamily: KAI_FONT, whiteSpace: 'pre-wrap' }}>
+                  {item.content}
+                </Text>
+              )}
+            </View>
+          ))}
+        </View>
+      </View>
+    ));
+  };
 
   // 按世代分组
   const generations: Record<number, Member[]> = {};
@@ -136,6 +212,9 @@ export default function ExportPreview() {
               )}
             </View>
 
+            {/* 卷首文化内容：前言、家史、家风家训、家族字辈、家族事记 */}
+            {renderCulturalSections(frontSections)}
+
             {/* 世代内容 */}
             {sortedGens.map(gen => (
               <View key={gen} className="mb-6">
@@ -189,6 +268,9 @@ export default function ExportPreview() {
                 </View>
               </View>
             ))}
+
+            {/* 卷末文化内容：后记、编写说明 */}
+            {renderCulturalSections(backSections)}
 
             {/* 页脚 */}
             <View className="text-center mt-8 pt-4" style={{ borderTop: '1px solid #E8E0D8' }}>

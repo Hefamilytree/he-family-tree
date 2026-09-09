@@ -121,7 +121,8 @@ export default function Members() {
     }
     try {
       const familyRes = await Network.request({ url: '/api/family' });
-      const familyId = familyRes.data?.data?.[0]?.id;
+      const familyPayload = familyRes.data?.data;
+      const familyId = Array.isArray(familyPayload) ? familyPayload[0]?.id : familyPayload?.id;
       if (!familyId) {
         Taro.showToast({ title: '请先创建家族', icon: 'none' });
         return;

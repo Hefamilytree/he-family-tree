@@ -12,7 +12,7 @@ export class FamilyService {
     const { data, error } = await client
       .from('families')
       .select('id, surname, family_name, hall_name, motto, description, origin, created_at, updated_at')
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
       .limit(1);
     if (error) throw new Error(`查询家族信息失败: ${error.message}`);
     return data && data.length > 0 ? data[0] : null;

@@ -17,7 +17,7 @@ const SECTION_API_MAP: Record<string, string> = {
 // 经济板块各分类的字段标签配置
 const ECONOMIC_FIELD_CONFIG: Record<string, { titleLabel: string; contentLabel: string; showContent: boolean; showNote: boolean; showImage: boolean }> = {
   contact: { titleLabel: '家族字辈', contentLabel: '备注', showContent: true, showNote: false, showImage: false },
-  relative: { titleLabel: '字辈', contentLabel: '现住址', showContent: true, showNote: true, showImage: false },
+  relative: { titleLabel: '家族字辈', contentLabel: '现住址', showContent: true, showNote: true, showImage: false },
   entrepreneur: { titleLabel: '单位名称', contentLabel: '经营范围', showContent: true, showNote: false, showImage: false },
   product: { titleLabel: '产品名称', contentLabel: '产品详情', showContent: true, showNote: false, showImage: true },
 };
@@ -108,7 +108,8 @@ export default function SectionEdit() {
     setSaving(true);
     try {
       const familyRes = await Network.request({ url: '/api/family' });
-      const familyId = familyRes.data?.data?.[0]?.id;
+      const familyPayload = familyRes.data?.data;
+      const familyId = Array.isArray(familyPayload) ? familyPayload[0]?.id : familyPayload?.id;
       if (!familyId) {
         Taro.showToast({ title: '请先创建家族', icon: 'none' });
         return;

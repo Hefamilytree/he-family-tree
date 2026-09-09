@@ -40,8 +40,8 @@ export default function FamilyTree() {
         Network.request({ url: '/api/members' }),
       ]);
       console.log('宗亲树数据:', familyRes.data, membersRes.data);
-      const familyList = familyRes.data?.data || [];
-      setFamily(familyList.length > 0 ? familyList[0] : null);
+      const familyPayload = familyRes.data?.data;
+      setFamily(Array.isArray(familyPayload) ? (familyPayload.length > 0 ? familyPayload[0] : null) : (familyPayload || null));
       setMembers(membersRes.data?.data || []);
     } catch (e) {
       console.error('加载数据失败:', e);

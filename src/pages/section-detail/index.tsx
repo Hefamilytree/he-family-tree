@@ -30,7 +30,7 @@ const SECTION_API_MAP: Record<string, string> = {
 // 经济板块各分类的字段标签配置
 const ECONOMIC_FIELD_CONFIG: Record<string, { titleLabel: string; contentLabel: string; showContent: boolean; showNote: boolean; showContact: boolean }> = {
   contact: { titleLabel: '家族字辈', contentLabel: '备注', showContent: true, showNote: false, showContact: true },
-  relative: { titleLabel: '字辈', contentLabel: '现住址', showContent: true, showNote: true, showContact: true },
+  relative: { titleLabel: '家族字辈', contentLabel: '现住址', showContent: true, showNote: true, showContact: true },
   entrepreneur: { titleLabel: '单位名称', contentLabel: '经营范围', showContent: true, showNote: false, showContact: true },
   product: { titleLabel: '产品名称', contentLabel: '产品详情', showContent: true, showNote: false, showContact: false },
 };
