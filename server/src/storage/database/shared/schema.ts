@@ -98,6 +98,7 @@ export const members = pgTable(
     parent_id: varchar("parent_id", { length: 36 }),
     spouse_name: varchar("spouse_name", { length: 100 }),
     generation: integer("generation").notNull().default(1),
+    generation_title: varchar("generation_title", { length: 100 }),
     bio: text("bio"),
     avatar_url: text("avatar_url"),
     is_alive: varchar("is_alive", { length: 10 }).notNull().default("yes"),

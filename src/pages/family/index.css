@@ -1,0 +1,89 @@
+/* 宗亲树 - 垂丝图样式 */
+.tree-canvas {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.tree-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.tree-node-content {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.tree-person-card,
+.tree-spouse-card {
+  border-radius: 8px;
+  padding: 8px 12px;
+  min-width: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.tree-spouse-link {
+  width: 16px;
+  height: 2px;
+  background-color: #8B2500;
+  flex-shrink: 0;
+}
+
+/* 子代容器 */
+.tree-children {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* 竖线：多子嗣时从父节点连到水平总线 */
+.tree-vertical-line {
+  width: 2px;
+  height: 20px;
+  background-color: #8B2500;
+}
+
+.tree-children-row {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+/* 每个分支：横线 + 竖线 + 子节点 */
+.tree-child-branch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 12px;
+}
+
+/* 横线：水平总线 */
+.tree-horizontal-line {
+  height: 2px;
+  width: 100%;
+  background-color: #8B2500;
+}
+
+/* 首分支横线只保留右半段，末分支只保留左半段 */
+.tree-child-branch:first-child .tree-horizontal-line {
+  width: 50%;
+  margin-left: 50%;
+}
+
+.tree-child-branch:last-child .tree-horizontal-line {
+  width: 50%;
+  margin-right: 50%;
+}
+
+/* 分支竖线：从横线连到子节点 */
+.tree-branch-stub {
+  width: 2px;
+  height: 20px;
+  background-color: #8B2500;
+}

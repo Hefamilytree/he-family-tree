@@ -36,6 +36,7 @@ export class MembersController {
     parent_id?: string | null;
     spouse_name?: string | null;
     generation?: number;
+    generation_title?: string | null;
     bio?: string | null;
     is_alive?: string;
     birth_place?: string | null;
@@ -54,6 +55,7 @@ export class MembersController {
     parent_id?: string | null;
     spouse_name?: string | null;
     generation?: number;
+    generation_title?: string | null;
     bio?: string | null;
     is_alive?: string;
     birth_place?: string | null;

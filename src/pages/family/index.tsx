@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { View, Text } from '@tarojs/components';
+import { View, Text, ScrollView } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import { TreePine } from 'lucide-react-taro';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Network } from '@/network';
+import './index.css';
 
 interface FamilyInfo {
   id: string;
@@ -14,35 +14,42 @@ interface FamilyInfo {
   hall_name: string | null;
 }
 
-interface Member {
+interface SpouseInfo {
+  id: string;
+  name: string;
+  status: string; // alive / deceased / divorced
+}
+
+interface TreeNode {
   id: string;
   name: string;
   gender: string;
   generation: number;
+  generation_title: string | null;
   is_alive: string;
   birth_date: string | null;
   death_date: string | null;
   spouse_name: string | null;
-  parent_id: string | null;
-  bio: string | null;
+  spouses: SpouseInfo[];
+  children: TreeNode[];
 }
 
 export default function FamilyTree() {
   const [family, setFamily] = useState<FamilyInfo | null>(null);
-  const [members, setMembers] = useState<Member[]>([]);
+  const [roots, setRoots] = useState<TreeNode[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [familyRes, membersRes] = await Promise.all([
+      const [familyRes, treeRes] = await Promise.all([
         Network.request({ url: '/api/family' }),
-        Network.request({ url: '/api/members' }),
+        Network.request({ url: '/api/members/tree' }),
       ]);
-      console.log('宗亲树数据:', familyRes.data, membersRes.data);
+      console.log('宗亲树数据:', familyRes.data, treeRes.data);
       const familyPayload = familyRes.data?.data;
       setFamily(Array.isArray(familyPayload) ? (familyPayload.length > 0 ? familyPayload[0] : null) : (familyPayload || null));
-      setMembers(membersRes.data?.data || []);
+      setRoots(treeRes.data?.data || []);
     } catch (e) {
       console.error('加载数据失败:', e);
     } finally {
@@ -52,16 +59,80 @@ export default function FamilyTree() {
 
   useDidShow(() => { loadData(); });
 
-  // 按世代分组
-  const generations: Record<number, Member[]> = {};
-  members.forEach(m => {
-    if (!generations[m.generation]) generations[m.generation] = [];
-    generations[m.generation].push(m);
-  });
-  const sortedGens = Object.keys(generations).map(Number).sort((a, b) => a - b);
-
   const handleAddMember = () => {
     Taro.navigateTo({ url: '/pages/members/index?mode=add' });
+  };
+
+  const countNodes = (nodes: TreeNode[]): number => {
+    return nodes.reduce((sum, n) => sum + 1 + countNodes(n.children), 0);
+  };
+
+  const spouseStatusLabel = (status: string) => {
+    if (status === 'deceased') return '故';
+    if (status === 'divorced') return '离';
+    return '';
+  };
+
+  // 渲染单个成员节点（含配偶）
+  const renderNode = (node: TreeNode) => {
+    const spouseList: SpouseInfo[] = (node.spouses && node.spouses.length > 0)
+      ? node.spouses
+      : (node.spouse_name ? [{ id: 'legacy', name: node.spouse_name, status: 'alive' }] : []);
+
+    return (
+      <View className="tree-node" key={node.id}>
+        <View className="tree-node-content">
+          {/* 成员本人卡片 */}
+          <View
+            className="tree-person-card"
+            style={{
+              backgroundColor: node.gender === 'male' ? '#E3F2FD' : '#FCE4EC',
+              border: `1px solid ${node.gender === 'male' ? '#90CAF9' : '#F48FB1'}`,
+            }}
+          >
+            <Text
+              className="block text-sm font-bold text-center"
+              style={{ color: node.gender === 'male' ? '#1565C0' : '#C62828', fontFamily: 'STKaiti, KaiTi, serif' }}
+            >
+              {node.name}
+              {node.is_alive === 'no' && <Text style={{ color: '#999' }}>（故）</Text>}
+            </Text>
+            {node.generation_title && (
+              <Text className="block text-xs text-center mt-1" style={{ color: '#8B2500' }}>
+                {node.generation_title}字辈
+              </Text>
+            )}
+          </View>
+          {/* 配偶卡片（可多位） */}
+          {spouseList.map((sp, idx) => (
+            <View key={sp.id || idx} className="flex items-center">
+              <View className="tree-spouse-link" />
+              <View className="tree-spouse-card" style={{ backgroundColor: '#FFF5F0', border: '1px solid #E8C8B8' }}>
+                <Text className="block text-sm text-center" style={{ color: '#8B2500', fontFamily: 'STKaiti, KaiTi, serif' }}>
+                  {sp.name}
+                  {spouseStatusLabel(sp.status) ? `（${spouseStatusLabel(sp.status)}）` : ''}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
+        {/* 子代 */}
+        {node.children.length > 0 && (
+          <View className="tree-children">
+            {node.children.length > 1 && <View className="tree-vertical-line" />}
+            <View className="tree-children-row">
+              {node.children.map(child => (
+                <View key={child.id} className="tree-child-branch">
+                  <View className="tree-horizontal-line" />
+                  <View className="tree-branch-stub" />
+                  {renderNode(child)}
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+      </View>
+    );
   };
 
   return (
@@ -71,94 +142,49 @@ export default function FamilyTree() {
         {loading ? (
           <Skeleton className="h-20 w-full" />
         ) : family ? (
-          <Card className="overflow-hidden border-2" style={{ borderColor: '#8B2500' }}>
-            <CardContent className="p-5">
-              <View className="flex items-center justify-between mb-2">
-                <Text className="text-xl font-bold" style={{ color: '#8B2500' }}>
-                  {family.family_name}
-                </Text>
-                <Button size="sm" onClick={handleAddMember}>
-                  <Text className="text-xs">添加成员</Text>
-                </Button>
-              </View>
-              {family.hall_name && (
-                <Text className="block text-sm" style={{ color: '#6B5B4F' }}>
-                  堂号：{family.hall_name}
-                </Text>
-              )}
-              <Text className="block text-sm mt-1" style={{ color: '#999' }}>
-                共 {members.length} 位宗亲 · {sortedGens.length} 个世代
+          <View className="overflow-hidden rounded-xl border-2 p-5" style={{ borderColor: '#8B2500', backgroundColor: '#FFFDF7' }}>
+            <View className="flex items-center justify-between mb-2">
+              <Text className="text-xl font-bold" style={{ color: '#8B2500', fontFamily: 'STKaiti, KaiTi, serif' }}>
+                {family.family_name}宗亲树
               </Text>
-            </CardContent>
-          </Card>
+              <Button size="sm" onClick={handleAddMember}>
+                <Text className="text-xs">添加成员</Text>
+              </Button>
+            </View>
+            {family.hall_name && (
+              <Text className="block text-sm" style={{ color: '#6B5B4F' }}>
+                堂号：{family.hall_name}
+              </Text>
+            )}
+            <Text className="block text-sm mt-1" style={{ color: '#999' }}>
+              共 {countNodes(roots)} 位宗亲 · 垂丝世系图
+            </Text>
+          </View>
         ) : (
-          <Card>
-            <CardContent className="p-6 text-center">
-              <Text className="block text-gray-500">暂无家族信息</Text>
-            </CardContent>
-          </Card>
+          <View className="rounded-xl p-6 text-center bg-white">
+            <Text className="block text-gray-500">暂无家族信息</Text>
+          </View>
         )}
       </View>
 
-      {/* 宗亲树 - 按世代展示 */}
+      {/* 垂丝图 */}
       <View className="px-4">
         {loading ? (
           <View className="space-y-3">
             {[1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full" />)}
           </View>
-        ) : sortedGens.length === 0 ? (
-          <Card>
-            <CardContent className="p-8 text-center">
-              <TreePine size={48} color="#CCC" className="mx-auto mb-3" />
-              <Text className="block text-gray-400 text-base">暂无宗亲数据</Text>
-              <Text className="block text-gray-400 text-sm mt-1">请先添加家族成员</Text>
-            </CardContent>
-          </Card>
+        ) : roots.length === 0 ? (
+          <View className="rounded-xl p-8 text-center bg-white">
+            <TreePine size={48} color="#CCC" className="mx-auto mb-3" />
+            <Text className="block text-gray-400 text-base">暂无宗亲数据</Text>
+            <Text className="block text-gray-400 text-sm mt-1">请先添加家族成员</Text>
+          </View>
         ) : (
-          sortedGens.map(gen => (
-            <View key={gen} className="mb-4">
-              <View className="flex items-center mb-2 px-1">
-                <View className="px-3 py-1 rounded" style={{ backgroundColor: '#8B2500' }}>
-                  <Text className="text-sm font-bold" style={{ color: '#FFFDF7' }}>第{gen}世</Text>
-                </View>
-                <View className="flex-1 h-px ml-2" style={{ backgroundColor: '#E8E0D8' }} />
-              </View>
-              <View className="space-y-2">
-                {generations[gen].map(member => (
-                  <Card key={member.id} className="overflow-hidden">
-                    <CardContent className="p-3">
-                      <View className="flex items-center justify-between">
-                        <View className="flex items-center gap-2">
-                          <View className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: member.gender === 'male' ? '#E3F2FD' : '#FCE4EC' }}>
-                            <Text className="text-sm font-bold" style={{ color: member.gender === 'male' ? '#1565C0' : '#C62828' }}>
-                              {member.name.charAt(0)}
-                            </Text>
-                          </View>
-                          <View>
-                            <Text className="block text-base font-bold" style={{ color: '#333' }}>
-                              {member.name}
-                              {member.is_alive === 'no' && (
-                                <Text className="text-xs ml-1" style={{ color: '#999' }}>(故)</Text>
-                              )}
-                            </Text>
-                            <Text className="block text-xs" style={{ color: '#999' }}>
-                              {member.birth_date || '未知'}
-                              {member.death_date ? ` - ${member.death_date}` : member.is_alive === 'yes' ? ' - 健在' : ''}
-                            </Text>
-                          </View>
-                        </View>
-                        {member.spouse_name && (
-                          <Text className="text-xs px-2 py-1 rounded" style={{ backgroundColor: '#FFF5F0', color: '#8B2500' }}>
-                            配 {member.spouse_name}
-                          </Text>
-                        )}
-                      </View>
-                    </CardContent>
-                  </Card>
-                ))}
-              </View>
+          <ScrollView scrollX className="w-full" enhanced showScrollbar={false}>
+            <View className="tree-canvas" style={{ backgroundColor: '#FFFDF7', border: '1px solid #E8E0D8', borderRadius: '12px', padding: '24px 20px', minWidth: '100%' }}>
+              {roots.map(root => renderNode(root))}
             </View>
-          ))
+          </ScrollView>
         )}
       </View>
     </View>

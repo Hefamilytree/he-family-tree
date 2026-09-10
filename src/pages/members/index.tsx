@@ -1,31 +1,45 @@
 import { useState, useEffect } from 'react';
 import { View, Text, ScrollView } from '@tarojs/components';
 import Taro, { useDidShow, useRouter } from '@tarojs/taro';
-import { Users, Plus, Pencil, Trash2, Printer, Search } from 'lucide-react-taro';
+import { Users, Plus, Pencil, Trash2, Printer, Search, X, UserPlus } from 'lucide-react-taro';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Network } from '@/network';
 
+interface Spouse {
+  id?: string;
+  name: string;
+  status: string; // alive 健在 / deceased 已故 / divorced 离异
+}
+
 interface Member {
   id: string;
   name: string;
   gender: string;
   generation: number;
+  generation_title: string | null;
   is_alive: string;
   birth_date: string | null;
   death_date: string | null;
   parent_id: string | null;
+  parent_name: string | null;
   spouse_name: string | null;
   bio: string | null;
   birth_place: string | null;
+  spouses?: Spouse[];
+}
+
+interface GenerationOption {
+  title: string;
 }
 
 export default function Members() {
   const router = useRouter();
   const [members, setMembers] = useState<Member[]>([]);
   const [filteredMembers, setFilteredMembers] = useState<Member[]>([]);
+  const [generationOptions, setGenerationOptions] = useState<GenerationOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchText, setSearchText] = useState('');
   const [filterGen, setFilterGen] = useState<number | null>(null);
@@ -35,11 +49,11 @@ export default function Members() {
   // 表单状态
   const [formName, setFormName] = useState('');
   const [formGender, setFormGender] = useState('male');
-  const [formGeneration, setFormGeneration] = useState(1);
+  const [formGenIndex, setFormGenIndex] = useState(0); // 字辈选项下标（0 起）
   const [formBirthDate, setFormBirthDate] = useState('');
   const [formDeathDate, setFormDeathDate] = useState('');
   const [formParentId, setFormParentId] = useState('');
-  const [formSpouseName, setFormSpouseName] = useState('');
+  const [formSpouses, setFormSpouses] = useState<Spouse[]>([]);
   const [formBio, setFormBio] = useState('');
   const [formIsAlive, setFormIsAlive] = useState('yes');
   const [formBirthPlace, setFormBirthPlace] = useState('');
@@ -47,11 +61,25 @@ export default function Members() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const res = await Network.request({ url: '/api/members' });
+      const [res, honorRes] = await Promise.all([
+        Network.request({ url: '/api/members' }),
+        Network.request({ url: '/api/cultural/category/honor' }),
+      ]);
       console.log('成员数据:', res.data);
       const list = res.data?.data || [];
       setMembers(list);
       setFilteredMembers(list);
+      // 家族字辈选项：从「家族字辈」板块内容提取
+      const honorList = honorRes.data?.data || [];
+      const options: GenerationOption[] = [];
+      honorList.forEach((item: any) => {
+        const content = item.content ? String(item.content) : '';
+        content.split(/[\s,，、\/\n]+/).forEach((c: string) => {
+          const t = c.trim();
+          if (t && !options.find(o => o.title === t)) options.push({ title: t });
+        });
+      });
+      setGenerationOptions(options);
     } catch (e) {
       console.error('加载成员失败:', e);
     } finally {
@@ -83,11 +111,11 @@ export default function Members() {
   const resetForm = () => {
     setFormName('');
     setFormGender('male');
-    setFormGeneration(1);
+    setFormGenIndex(0);
     setFormBirthDate('');
     setFormDeathDate('');
     setFormParentId('');
-    setFormSpouseName('');
+    setFormSpouses([]);
     setFormBio('');
     setFormIsAlive('yes');
     setFormBirthPlace('');
@@ -103,15 +131,40 @@ export default function Members() {
     setEditingMember(member);
     setFormName(member.name);
     setFormGender(member.gender);
-    setFormGeneration(member.generation);
     setFormBirthDate(member.birth_date || '');
     setFormDeathDate(member.death_date || '');
     setFormParentId(member.parent_id || '');
-    setFormSpouseName(member.spouse_name || '');
     setFormBio(member.bio || '');
     setFormIsAlive(member.is_alive);
     setFormBirthPlace(member.birth_place || '');
+    // 回填配偶：优先 spouses 表，兼容旧字段 spouse_name
+    const spouseList = (member.spouses && member.spouses.length > 0)
+      ? member.spouses.map(s => ({ id: s.id, name: s.name, status: s.status || 'alive' }))
+      : (member.spouse_name ? [{ name: member.spouse_name, status: 'alive' }] : []);
+    setFormSpouses(spouseList);
+    // 字辈：优先匹配 generation_title，否则按世代数回推
+    let idx = (member.generation || 1) - 1;
+    if (generationOptions.length > 0) {
+      if (member.generation_title) {
+        const matched = generationOptions.findIndex(o => o.title === member.generation_title);
+        if (matched >= 0) idx = matched;
+      }
+      idx = Math.max(0, Math.min(idx, generationOptions.length - 1));
+    }
+    setFormGenIndex(idx);
     setShowAddForm(true);
+  };
+
+  const handleAddSpouse = () => {
+    setFormSpouses([...formSpouses, { name: '', status: 'alive' }]);
+  };
+
+  const handleRemoveSpouse = (idx: number) => {
+    setFormSpouses(formSpouses.filter((_, i) => i !== idx));
+  };
+
+  const handleUpdateSpouse = (idx: number, field: 'name' | 'status', value: string) => {
+    setFormSpouses(formSpouses.map((s, i) => i === idx ? { ...s, [field]: value } : s));
   };
 
   const handleSave = async () => {
@@ -119,6 +172,11 @@ export default function Members() {
       Taro.showToast({ title: '请输入姓名', icon: 'none' });
       return;
     }
+    // 字辈选择结果：有字辈则取字辈，generation 为字辈序号+1；否则提示配置字辈
+    const genTitle = generationOptions[formGenIndex]?.title || null;
+    const genNumber = generationOptions.length > 0 ? formGenIndex + 1 : formGenIndex + 1;
+    const validSpouses = formSpouses.filter(s => s.name.trim());
+
     try {
       const familyRes = await Network.request({ url: '/api/family' });
       const familyPayload = familyRes.data?.data;
@@ -131,23 +189,48 @@ export default function Members() {
       const data: any = {
         name: formName,
         gender: formGender,
-        generation: formGeneration,
+        generation: genNumber,
+        generation_title: genTitle,
         is_alive: formIsAlive,
         birth_date: formBirthDate || null,
         death_date: formIsAlive === 'no' ? (formDeathDate || null) : null,
         parent_id: formParentId || null,
-        spouse_name: formSpouseName || null,
+        spouse_name: validSpouses.length > 0 ? validSpouses[0].name.trim() : null,
         bio: formBio || null,
         birth_place: formBirthPlace || null,
       };
 
+      let savedId = '';
       if (editingMember) {
-        await Network.request({ url: `/api/members/${editingMember.id}`, method: 'PUT', data });
+        const updateRes = await Network.request({ url: `/api/members/${editingMember.id}`, method: 'PUT', data });
+        console.log('更新成员响应:', updateRes.data);
+        savedId = editingMember.id;
         Taro.showToast({ title: '更新成功', icon: 'success' });
       } else {
-        await Network.request({ url: '/api/members', method: 'POST', data });
+        const createRes = await Network.request({ url: '/api/members', method: 'POST', data });
+        console.log('新增成员响应:', createRes.data);
+        savedId = createRes.data?.data?.id || '';
         Taro.showToast({ title: '添加成功', icon: 'success' });
       }
+
+      // 同步多配偶数据到 spouses 表
+      if (savedId) {
+        // 先同步配偶：简单策略——以表单为准，删除原有全部后重建
+        const existing = editingMember?.spouses || [];
+        for (const s of existing) {
+          if (s.id) {
+            await Network.request({ url: `/api/spouses?id=${s.id}`, method: 'DELETE' }).catch(() => null);
+          }
+        }
+        for (const s of validSpouses) {
+          await Network.request({
+            url: '/api/spouses',
+            method: 'POST',
+            data: { memberId: savedId, name: s.name.trim(), status: s.status },
+          }).catch((err) => console.error('保存配偶失败:', err));
+        }
+      }
+
       setShowAddForm(false);
       resetForm();
       loadData();
@@ -173,6 +256,15 @@ export default function Members() {
     Taro.navigateTo({ url: '/pages/export/index' });
   };
 
+  const spouseStatusLabel = (status: string) => {
+    if (status === 'deceased') return '故';
+    if (status === 'divorced') return '离异';
+    return '';
+  };
+
+  // 父代候选（不包含自身及后代，简单排除自身）
+  const parentCandidates = members.filter(m => m.id !== editingMember?.id);
+
   return (
     <View className="min-h-full bg-[#FAF8F5] pb-20">
       {/* 搜索栏 */}
@@ -192,7 +284,7 @@ export default function Members() {
           </Button>
         </View>
 
-        {/* 世代筛选 */}
+        {/* 字辈筛选 */}
         {generations.length > 0 && (
           <ScrollView scrollX className="flex gap-2 pb-2">
             <View
@@ -209,7 +301,7 @@ export default function Members() {
                 style={{ backgroundColor: filterGen === gen ? '#8B2500' : '#FFFDF7', color: filterGen === gen ? '#FFFDF7' : '#6B5B4F' }}
                 onClick={() => setFilterGen(gen)}
               >
-                <Text className="text-xs">第{gen}世</Text>
+                <Text className="text-xs">{genTitleOfGen(gen)}</Text>
               </View>
             ))}
           </ScrollView>
@@ -245,21 +337,6 @@ export default function Members() {
                   </View>
                 </View>
                 <View className="flex-1">
-                  <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>世代</Text>
-                  <View className="bg-[#FFFDF7] rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
-                    <Input className="w-full bg-transparent" type="number" placeholder="世代数" value={String(formGeneration)} onInput={(e) => setFormGeneration(Number(e.detail.value))} />
-                  </View>
-                </View>
-              </View>
-
-              <View className="flex gap-3 mb-3">
-                <View className="flex-1">
-                  <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>出生日期</Text>
-                  <View className="bg-[#FFFDF7] rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
-                    <Input className="w-full bg-transparent" placeholder="如：1950" value={formBirthDate} onInput={(e) => setFormBirthDate(e.detail.value)} />
-                  </View>
-                </View>
-                <View className="flex-1">
                   <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>状态</Text>
                   <View className="flex gap-2">
                     <View className="flex-1 px-3 py-2 rounded-lg text-center" style={{ backgroundColor: formIsAlive === 'yes' ? '#E8F5E9' : '#FFFDF7', color: formIsAlive === 'yes' ? '#2E7D32' : '#6B5B4F' }} onClick={() => setFormIsAlive('yes')}>
@@ -272,20 +349,119 @@ export default function Members() {
                 </View>
               </View>
 
-              {formIsAlive === 'no' && (
-                <View className="mb-3">
-                  <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>逝世日期</Text>
+              {/* 字辈选择（链接家族字辈） */}
+              <View className="mb-3">
+                <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>字辈（家族字辈）</Text>
+                {generationOptions.length > 0 ? (
+                  <ScrollView scrollX className="flex gap-2 pb-1">
+                    {generationOptions.map((opt, idx) => (
+                      <View
+                        key={opt.title}
+                        className="px-4 py-2 rounded-lg whitespace-nowrap text-center"
+                        style={{ backgroundColor: formGenIndex === idx ? '#8B2500' : '#FFFDF7', border: '1px solid #E8E0D8' }}
+                        onClick={() => setFormGenIndex(idx)}
+                      >
+                        <Text className="text-sm" style={{ color: formGenIndex === idx ? '#FFFDF7' : '#6B5B4F' }}>
+                          {idx + 1}世 · {opt.title}
+                        </Text>
+                      </View>
+                    ))}
+                  </ScrollView>
+                ) : (
+                  <View className="bg-[#FFF5F0] rounded-lg p-2 border" style={{ borderColor: '#E8C8B8' }}>
+                    <Text className="block text-xs" style={{ color: '#8B2500' }}>
+                      尚未配置家族字辈，请到「族谱首页 → 文化传承 → 家族字辈」添加字辈内容（按辈分顺序，用空格或顿号分隔）。
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {/* 父辈选择 */}
+              <View className="mb-3">
+                <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>父辈（挂靠宗亲）</Text>
+                <ScrollView scrollX className="flex gap-2 pb-1">
+                  <View
+                    className="px-4 py-2 rounded-lg whitespace-nowrap"
+                    style={{ backgroundColor: formParentId === '' ? '#8B2500' : '#FFFDF7', border: '1px solid #E8E0D8' }}
+                    onClick={() => setFormParentId('')}
+                  >
+                    <Text className="text-sm" style={{ color: formParentId === '' ? '#FFFDF7' : '#6B5B4F' }}>始祖（无父）</Text>
+                  </View>
+                  {parentCandidates.map(m => (
+                    <View
+                      key={m.id}
+                      className="px-4 py-2 rounded-lg whitespace-nowrap"
+                      style={{ backgroundColor: formParentId === m.id ? '#8B2500' : '#FFFDF7', border: '1px solid #E8E0D8' }}
+                      onClick={() => setFormParentId(m.id)}
+                    >
+                      <Text className="text-sm" style={{ color: formParentId === m.id ? '#FFFDF7' : '#6B5B4F' }}>
+                        {m.name}{m.generation_title ? `（${m.generation_title}）` : ''}
+                      </Text>
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+
+              <View className="flex gap-3 mb-3">
+                <View className="flex-1">
+                  <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>出生日期</Text>
                   <View className="bg-[#FFFDF7] rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
-                    <Input className="w-full bg-transparent" placeholder="如：2020" value={formDeathDate} onInput={(e) => setFormDeathDate(e.detail.value)} />
+                    <Input className="w-full bg-transparent" placeholder="如：1950" value={formBirthDate} onInput={(e) => setFormBirthDate(e.detail.value)} />
                   </View>
                 </View>
-              )}
+                {formIsAlive === 'no' && (
+                  <View className="flex-1">
+                    <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>逝世日期</Text>
+                    <View className="bg-[#FFFDF7] rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
+                      <Input className="w-full bg-transparent" placeholder="如：2020" value={formDeathDate} onInput={(e) => setFormDeathDate(e.detail.value)} />
+                    </View>
+                  </View>
+                )}
+              </View>
 
+              {/* 多配偶 */}
               <View className="mb-3">
-                <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>配偶姓名</Text>
-                <View className="bg-[#FFFDF7] rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
-                  <Input className="w-full bg-transparent" placeholder="请输入配偶姓名" value={formSpouseName} onInput={(e) => setFormSpouseName(e.detail.value)} />
+                <View className="flex items-center justify-between mb-1">
+                  <Text className="block text-sm" style={{ color: '#6B5B4F' }}>配偶（可添加多位）</Text>
+                  <Button size="sm" variant="outline" onClick={handleAddSpouse}>
+                    <UserPlus size={14} color="#8B2500" />
+                    <Text className="text-xs ml-1">添加配偶</Text>
+                  </Button>
                 </View>
+                {formSpouses.length === 0 && (
+                  <Text className="block text-xs text-stone-400 py-2">尚未添加配偶</Text>
+                )}
+                {formSpouses.map((spouse, idx) => (
+                  <View key={idx} className="flex items-center gap-2 mb-2">
+                    <View className="flex-1 bg-[#FFFDF7] rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
+                      <Input
+                        className="w-full bg-transparent"
+                        placeholder="配偶姓名"
+                        value={spouse.name}
+                        onInput={(e) => handleUpdateSpouse(idx, 'name', e.detail.value)}
+                      />
+                    </View>
+                    <View className="flex gap-1">
+                      {[
+                        { value: 'alive', label: '健在', color: '#2E7D32' },
+                        { value: 'deceased', label: '故', color: '#C62828' },
+                        { value: 'divorced', label: '离异', color: '#6B5B4F' },
+                      ].map(opt => (
+                        <View
+                          key={opt.value}
+                          className="px-2 py-2 rounded-lg"
+                          style={{ backgroundColor: spouse.status === opt.value ? opt.color : '#FFFDF7', border: '1px solid #E8E0D8' }}
+                          onClick={() => handleUpdateSpouse(idx, 'status', opt.value)}
+                        >
+                          <Text className="text-xs" style={{ color: spouse.status === opt.value ? '#FFFDF7' : opt.color }}>{opt.label}</Text>
+                        </View>
+                      ))}
+                    </View>
+                    <View className="p-2 rounded-lg" style={{ backgroundColor: '#FFEBEE' }} onClick={() => handleRemoveSpouse(idx)}>
+                      <X size={14} color="#C62828" />
+                    </View>
+                  </View>
+                ))}
               </View>
 
               <View className="mb-3">
@@ -351,22 +527,23 @@ export default function Members() {
                         </Text>
                       </View>
                       <View className="flex-1">
-                        <View className="flex items-center gap-2 mb-1">
+                        <View className="flex items-center gap-2 mb-1 flex-wrap">
                           <Text className="text-base font-bold" style={{ color: '#333' }}>{member.name}</Text>
                           <Text className="text-xs px-2 py-1 rounded" style={{ backgroundColor: member.gender === 'male' ? '#E3F2FD' : '#FCE4EC', color: member.gender === 'male' ? '#1565C0' : '#C62828' }}>
                             {member.gender === 'male' ? '男' : '女'}
                           </Text>
                           <Text className="text-xs px-2 py-1 rounded" style={{ backgroundColor: '#FFF5F0', color: '#8B2500' }}>
-                            第{member.generation}世
+                            {member.generation_title ? `${member.generation_title}字辈` : `第${member.generation}世`}
                           </Text>
                         </View>
                         <Text className="block text-xs" style={{ color: '#999' }}>
                           {member.birth_date || '未知'}
                           {member.death_date ? ` - ${member.death_date}` : member.is_alive === 'yes' ? ' - 健在' : ' - 已故'}
                         </Text>
-                        {member.spouse_name && (
-                          <Text className="block text-xs mt-1" style={{ color: '#6B5B4F' }}>
-                            配偶：{member.spouse_name}
+                        {renderSpouseText(member)}
+                        {member.parent_name && (
+                          <Text className="block text-xs" style={{ color: '#6B5B4F' }}>
+                            父：{member.parent_name}
                           </Text>
                         )}
                         {member.birth_place && (
@@ -393,4 +570,23 @@ export default function Members() {
       </View>
     </View>
   );
+
+  function renderSpouseText(member: Member) {
+    const list = member.spouses && member.spouses.length > 0
+      ? member.spouses
+      : (member.spouse_name ? [{ name: member.spouse_name, status: 'alive' } as Spouse] : []);
+    if (list.length === 0) return null;
+    const text = list.map(s => `${s.name}${spouseStatusLabel(s.status) ? `(${spouseStatusLabel(s.status)})` : ''}`).join('、');
+    return (
+      <Text className="block text-xs mt-1" style={{ color: '#6B5B4F' }}>
+        配偶：{text}
+      </Text>
+    );
+  }
+
+  function genTitleOfGen(gen: number) {
+    const member = members.find(m => m.generation === gen);
+    if (member?.generation_title) return `${member.generation_title}字辈`;
+    return `第${gen}世`;
+  }
 }

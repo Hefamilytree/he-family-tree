@@ -12,7 +12,7 @@ export class MembersService {
     const { data, error } = await client
       .from('families')
       .select('id')
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
       .limit(1);
     if (error) throw new Error(`查询家族失败: ${error.message}`);
     return data && data.length > 0 ? data[0].id : null;
@@ -25,18 +25,34 @@ export class MembersService {
     const client = this.getClient();
     const { data, error } = await client
       .from('members')
-      .select('id, family_id, name, gender, birth_date, death_date, parent_id, spouse_name, generation, bio, is_alive, birth_place, created_at, updated_at')
+      .select('id, family_id, name, gender, birth_date, death_date, parent_id, spouse_name, generation, generation_title, bio, is_alive, birth_place, created_at, updated_at')
       .eq('family_id', familyId)
       .order('generation', { ascending: true })
       .order('name', { ascending: true });
     if (error) throw new Error(`查询成员失败: ${error.message}`);
 
-    // 附加 parent_name
     const members = data || [];
+
+    // 查询所有配偶信息并按成员分组
+    const spousesData = members.length === 0 ? [] : (
+      await client
+        .from('spouses')
+        .select('*')
+        .or(members.map(m => `member_id.eq.${m.id}`).join(','))
+    ).data;
+
+    const spouseMap = new Map<string, any[]>();
+    (spousesData || []).forEach(s => {
+      const list = spouseMap.get(s.member_id) || [];
+      list.push(s);
+      spouseMap.set(s.member_id, list);
+    });
+
     const memberMap = new Map(members.map((m) => [m.id, m]));
     return members.map((m) => ({
       ...m,
       parent_name: m.parent_id ? (memberMap.get(m.parent_id)?.name || null) : null,
+      spouses: spouseMap.get(m.id) || [],
     }));
   }
 
@@ -60,19 +76,35 @@ export class MembersService {
     const client = this.getClient();
     const { data, error } = await client
       .from('members')
-      .select('id, name, gender, generation, is_alive, birth_date, death_date, spouse_name, parent_id')
+      .select('id, name, gender, generation, generation_title, is_alive, birth_date, death_date, spouse_name, parent_id')
       .eq('family_id', familyId)
       .order('generation', { ascending: true });
     if (error) throw new Error(`查询族谱树失败: ${error.message}`);
 
     const members = data || [];
+
+    // 附加多配偶信息
+    const spousesData = members.length === 0 ? [] : (
+      await client
+        .from('spouses')
+        .select('*')
+        .or(members.map(m => `member_id.eq.${m.id}`).join(','))
+    ).data;
+
+    const spouseMap = new Map<string, any[]>();
+    (spousesData || []).forEach(s => {
+      const list = spouseMap.get(s.member_id) || [];
+      list.push(s);
+      spouseMap.set(s.member_id, list);
+    });
+
     // 构建树结构
     const memberMap = new Map<string, any>();
     const roots: any[] = [];
 
     // 第一遍：创建节点映射
     for (const m of members) {
-      memberMap.set(m.id, { ...m, children: [] });
+      memberMap.set(m.id, { ...m, spouses: spouseMap.get(m.id) || [], children: [] });
     }
 
     // 第二遍：建立父子关系
@@ -96,6 +128,7 @@ export class MembersService {
     parent_id?: string | null;
     spouse_name?: string | null;
     generation?: number;
+    generation_title?: string | null;
     bio?: string | null;
     is_alive?: string;
     birth_place?: string | null;
@@ -121,6 +154,7 @@ export class MembersService {
     parent_id?: string | null;
     spouse_name?: string | null;
     generation?: number;
+    generation_title?: string | null;
     bio?: string | null;
     is_alive?: string;
     birth_place?: string | null;
