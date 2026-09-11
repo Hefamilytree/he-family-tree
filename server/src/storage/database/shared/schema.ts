@@ -103,6 +103,7 @@ export const members = pgTable(
     avatar_url: text("avatar_url"),
     is_alive: varchar("is_alive", { length: 10 }).notNull().default("yes"),
     birth_place: varchar("birth_place", { length: 200 }),
+    burial_place: varchar("burial_place", { length: 255 }),
     created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updated_at: timestamp("updated_at", { withTimezone: true }),
   },

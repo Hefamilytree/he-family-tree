@@ -28,6 +28,7 @@ interface Member {
   spouse_name: string | null;
   bio: string | null;
   birth_place: string | null;
+  burial_place: string | null;
 }
 
 interface CulturalItem {
@@ -255,6 +256,11 @@ export default function ExportPreview() {
                         {member.birth_place && (
                           <Text className="block text-sm" style={{ color: '#6B5B4F', fontFamily: 'STKaiti, KaiTi, serif' }}>
                             出生地：{member.birth_place}
+                          </Text>
+                        )}
+                        {member.burial_place && member.is_alive === 'no' && (
+                          <Text className="block text-sm" style={{ color: '#6B5B4F', fontFamily: 'STKaiti, KaiTi, serif' }}>
+                            葬地：{member.burial_place}
                           </Text>
                         )}
                         {member.bio && (

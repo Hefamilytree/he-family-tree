@@ -60,7 +60,13 @@ export default function FamilyTree() {
   useDidShow(() => { loadData(); });
 
   const handleAddMember = () => {
-    Taro.navigateTo({ url: '/pages/members/index?mode=add' });
+    Taro.eventCenter.trigger('addMemberFromTree');
+    Taro.switchTab({ url: '/pages/members/index' });
+  };
+
+  const handleEditMember = (node: TreeNode) => {
+    Taro.eventCenter.trigger('editMemberFromTree', node.id);
+    Taro.switchTab({ url: '/pages/members/index' });
   };
 
   const countNodes = (nodes: TreeNode[]): number => {
@@ -82,9 +88,10 @@ export default function FamilyTree() {
     return (
       <View className="tree-node" key={node.id}>
         <View className="tree-node-content">
-          {/* 成员本人卡片 */}
+          {/* 成员本人卡片（点击可直接编辑） */}
           <View
             className="tree-person-card"
+            onClick={() => handleEditMember(node)}
             style={{
               backgroundColor: node.gender === 'male' ? '#E3F2FD' : '#FCE4EC',
               border: `1px solid ${node.gender === 'male' ? '#90CAF9' : '#F48FB1'}`,
@@ -102,6 +109,9 @@ export default function FamilyTree() {
                 {node.generation_title}字辈
               </Text>
             )}
+            <Text className="block text-xs text-center mt-1" style={{ color: '#B0A090' }}>
+              点击编辑
+            </Text>
           </View>
           {/* 配偶卡片（可多位） */}
           {spouseList.map((sp, idx) => (

@@ -7,6 +7,18 @@ export class MembersService {
     return getSupabaseClient();
   }
 
+  // 已故成员缺省信息补全：生失考 / 卒失考 / 葬地不详
+  private normalizeMember(payload: Record<string, any>): Record<string, any> {
+    const result = { ...payload };
+    const isDead = result.is_alive === 'no';
+    if (isDead) {
+      if (!result.birth_date) result.birth_date = '生失考';
+      if (!result.death_date) result.death_date = '卒失考';
+      if (!result.burial_place) result.burial_place = '葬地不详';
+    }
+    return result;
+  }
+
   private async getFamilyId(): Promise<string | null> {
     const client = this.getClient();
     const { data, error } = await client
@@ -25,7 +37,7 @@ export class MembersService {
     const client = this.getClient();
     const { data, error } = await client
       .from('members')
-      .select('id, family_id, name, gender, birth_date, death_date, parent_id, spouse_name, generation, generation_title, bio, is_alive, birth_place, created_at, updated_at')
+      .select('id, family_id, name, gender, birth_date, death_date, parent_id, spouse_name, generation, generation_title, bio, is_alive, birth_place, burial_place, created_at, updated_at')
       .eq('family_id', familyId)
       .order('generation', { ascending: true })
       .order('name', { ascending: true });
@@ -76,7 +88,7 @@ export class MembersService {
     const client = this.getClient();
     const { data, error } = await client
       .from('members')
-      .select('id, name, gender, generation, generation_title, is_alive, birth_date, death_date, spouse_name, parent_id')
+      .select('id, name, gender, generation, generation_title, is_alive, birth_date, death_date, spouse_name, parent_id, burial_place')
       .eq('family_id', familyId)
       .order('generation', { ascending: true });
     if (error) throw new Error(`查询族谱树失败: ${error.message}`);
@@ -132,6 +144,7 @@ export class MembersService {
     bio?: string | null;
     is_alive?: string;
     birth_place?: string | null;
+    burial_place?: string | null;
   }) {
     const familyId = await this.getFamilyId();
     if (!familyId) throw new Error('请先创建家族信息');
@@ -139,7 +152,7 @@ export class MembersService {
     const client = this.getClient();
     const { data, error } = await client
       .from('members')
-      .insert({ ...payload, family_id: familyId })
+      .insert({ ...this.normalizeMember(payload), family_id: familyId })
       .select()
       .single();
     if (error) throw new Error(`添加成员失败: ${error.message}`);
@@ -158,11 +171,12 @@ export class MembersService {
     bio?: string | null;
     is_alive?: string;
     birth_place?: string | null;
+    burial_place?: string | null;
   }) {
     const client = this.getClient();
     const { data, error } = await client
       .from('members')
-      .update({ ...payload, updated_at: new Date().toISOString() })
+      .update({ ...this.normalizeMember(payload), updated_at: new Date().toISOString() })
       .eq('id', id)
       .select()
       .maybeSingle();

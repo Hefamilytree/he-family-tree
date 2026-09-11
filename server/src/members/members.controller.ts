@@ -40,6 +40,7 @@ export class MembersController {
     bio?: string | null;
     is_alive?: string;
     birth_place?: string | null;
+    burial_place?: string | null;
   }) {
     const data = await this.membersService.createMember(body);
     return { code: 200, msg: '添加成功', data };
@@ -59,6 +60,7 @@ export class MembersController {
     bio?: string | null;
     is_alive?: string;
     birth_place?: string | null;
+    burial_place?: string | null;
   }) {
     const data = await this.membersService.updateMember(id, body);
     return { code: 200, msg: '更新成功', data };
