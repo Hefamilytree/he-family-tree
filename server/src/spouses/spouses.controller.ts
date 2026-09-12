@@ -13,18 +13,20 @@ export class SpousesController {
 
   @Post()
   @HttpCode(HttpStatus.OK)
-  async create(@Body() body: { memberId: string; name: string; status: string; birthDate?: string; deathDate?: string }) {
-    const data = await this.spousesService.create(body.memberId, body.name, body.status, body.birthDate, body.deathDate);
+  async create(@Body() body: { memberId: string; name: string; status: string; birthDate?: string; deathDate?: string; bio?: string; burialPlace?: string }) {
+    const data = await this.spousesService.create(body.memberId, body.name, body.status, body.birthDate, body.deathDate, body.bio, body.burialPlace);
     return { code: 200, msg: '添加成功', data };
   }
 
   @Put()
-  async update(@Body() body: { id: string; name?: string; status?: string; birthDate?: string; deathDate?: string }) {
+  async update(@Body() body: { id: string; name?: string; status?: string; birthDate?: string; deathDate?: string; bio?: string; burialPlace?: string }) {
     const data = await this.spousesService.update(body.id, {
       name: body.name,
       status: body.status,
       birth_date: body.birthDate,
       death_date: body.deathDate,
+      bio: body.bio,
+      burial_place: body.burialPlace,
     });
     return { code: 200, msg: '更新成功', data };
   }

@@ -16,6 +16,21 @@ interface Spouse {
   status: string; // alive 健在 / deceased 已故 / divorced 离异
   birthDate?: string;
   deathDate?: string;
+  bio?: string;
+  burialPlace?: string;
+}
+
+/** 兼容后端配偶字段（snake_case）与表单字段（camelCase） */
+function normalizeSpouse(raw: any): Spouse {
+  return {
+    id: raw.id,
+    name: raw.name,
+    status: raw.status || 'alive',
+    birthDate: raw.birthDate ?? raw.birth_date ?? '',
+    deathDate: raw.deathDate ?? raw.death_date ?? '',
+    bio: raw.bio ?? '',
+    burialPlace: raw.burialPlace ?? raw.burial_place ?? '',
+  };
 }
 
 interface Member {
@@ -71,7 +86,10 @@ export default function Members() {
         Network.request({ url: '/api/cultural/category/honor' }),
       ]);
       console.log('成员数据:', res.data);
-      const list = res.data?.data || [];
+      const list = (res.data?.data || []).map((m: Member) => ({
+        ...m,
+        spouses: (m.spouses || []).map(normalizeSpouse),
+      }));
       setMembers(list);
       setFilteredMembers(list);
       // 家族字辈选项：从「家族字辈」板块内容提取
@@ -166,8 +184,11 @@ export default function Members() {
     setFormBurialPlace(member.burial_place && member.burial_place !== '葬地不详' ? member.burial_place : '');
     // 回填配偶：优先 spouses 表，兼容旧字段 spouse_name
     const spouseList = (member.spouses && member.spouses.length > 0)
-      ? member.spouses.map(s => ({ id: s.id, name: s.name, status: s.status || 'alive', birthDate: s.birthDate || '', deathDate: s.deathDate || '' }))
-      : (member.spouse_name ? [{ name: member.spouse_name, status: 'alive', birthDate: '', deathDate: '' }] : []);
+      ? member.spouses.map(normalizeSpouse).map(s => ({
+        ...s,
+        burialPlace: s.burialPlace && s.burialPlace !== '葬地不详' ? s.burialPlace : '',
+      }))
+      : (member.spouse_name ? [{ name: member.spouse_name, status: 'alive', birthDate: '', deathDate: '', bio: '', burialPlace: '' }] : []);
     setFormSpouses(spouseList);
     // 字辈：优先匹配 generation_title，否则按世代数回推
     let idx = (member.generation || 1) - 1;
@@ -183,14 +204,14 @@ export default function Members() {
   };
 
   const handleAddSpouse = () => {
-    setFormSpouses([...formSpouses, { name: '', status: 'alive', birthDate: '', deathDate: '' }]);
+    setFormSpouses([...formSpouses, { name: '', status: 'alive', birthDate: '', deathDate: '', bio: '', burialPlace: '' }]);
   };
 
   const handleRemoveSpouse = (idx: number) => {
     setFormSpouses(formSpouses.filter((_, i) => i !== idx));
   };
 
-  const handleUpdateSpouse = (idx: number, field: 'name' | 'status' | 'birthDate' | 'deathDate', value: string) => {
+  const handleUpdateSpouse = (idx: number, field: 'name' | 'status' | 'birthDate' | 'deathDate' | 'bio' | 'burialPlace', value: string) => {
     setFormSpouses(formSpouses.map((s, i) => i === idx ? { ...s, [field]: value } : s));
   };
 
@@ -260,6 +281,8 @@ export default function Members() {
               status: s.status,
               birthDate: s.status === 'deceased' || s.birthDate ? (s.birthDate || null) : null,
               deathDate: s.status === 'deceased' ? (s.deathDate || null) : null,
+              bio: s.bio?.trim() || null,
+              burialPlace: s.status === 'deceased' ? (s.burialPlace?.trim() || null) : null,
             },
           }).catch((err) => console.error('保存配偶失败:', err));
         }
@@ -502,6 +525,20 @@ export default function Members() {
                         </View>
                       )}
                     </View>
+                    {spouse.status === 'deceased' && (
+                      <View className="mt-2">
+                        <Text className="block text-xs mb-1" style={{ color: '#6B5B4F' }}>葬地（留空记为「葬地不详」）</Text>
+                        <View className="bg-[#FFFDF7] rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
+                          <Input className="w-full bg-transparent" placeholder="请输入葬地" value={spouse.burialPlace || ''} onInput={(e) => handleUpdateSpouse(idx, 'burialPlace', e.detail.value)} />
+                        </View>
+                      </View>
+                    )}
+                    <View className="mt-2">
+                      <Text className="block text-xs mb-1" style={{ color: '#6B5B4F' }}>简介</Text>
+                      <View className="bg-[#FFFDF7] rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
+                        <Textarea className="w-full bg-transparent" style={{ minHeight: 48 }} placeholder="请输入简介（生平、事迹等）" value={spouse.bio || ''} onInput={(e) => handleUpdateSpouse(idx, 'bio', e.detail.value)} />
+                      </View>
+                    </View>
                   </View>
                 ))}
               </View>
@@ -637,11 +674,25 @@ export default function Members() {
       ? member.spouses
       : (member.spouse_name ? [{ name: member.spouse_name, status: 'alive' } as Spouse] : []);
     if (list.length === 0) return null;
-    const text = list.map(s => `${s.name}${spouseStatusLabel(s.status) ? `(${spouseStatusLabel(s.status)})` : ''}`).join('、');
     return (
-      <Text className="block text-xs mt-1" style={{ color: '#6B5B4F' }}>
-        配偶：{text}
-      </Text>
+      <View className="mt-1">
+        {list.map((s, i) => (
+          <View key={s.id || i} className="mb-1 pl-2 border-l-2" style={{ borderColor: '#E8DDD2' }}>
+            <Text className="block text-xs" style={{ color: '#6B5B4F' }}>
+              配偶：{s.name}{spouseStatusLabel(s.status) ? `（${spouseStatusLabel(s.status)}）` : ''}
+            </Text>
+            {(s.birthDate || (s.status === 'deceased' && s.deathDate)) && (
+              <Text className="block text-xs" style={{ color: '#999' }}>
+                {s.birthDate || '生失考'}{s.status === 'deceased' ? ` — ${s.deathDate || '卒失考'}` : ''}
+              </Text>
+            )}
+            {s.status === 'deceased' && s.burialPlace && (
+              <Text className="block text-xs" style={{ color: '#999' }}>葬地：{s.burialPlace}</Text>
+            )}
+            {s.bio && <Text className="block text-xs" style={{ color: '#999' }}>{s.bio}</Text>}
+          </View>
+        ))}
+      </View>
     );
   }
 

@@ -18,6 +18,10 @@ interface SpouseInfo {
   id: string;
   name: string;
   status: string; // alive / deceased / divorced
+  birth_date?: string | null;
+  death_date?: string | null;
+  bio?: string | null;
+  burial_place?: string | null;
 }
 
 interface TreeNode {
@@ -122,6 +126,15 @@ export default function FamilyTree() {
                   {sp.name}
                   {spouseStatusLabel(sp.status) ? `（${spouseStatusLabel(sp.status)}）` : ''}
                 </Text>
+                {(sp.birth_date || (sp.status === 'deceased' && sp.death_date)) && (
+                  <Text className="block text-xs text-center" style={{ color: '#999' }}>
+                    {sp.birth_date || '生失考'}{sp.status === 'deceased' ? `—${sp.death_date || '卒失考'}` : ''}
+                  </Text>
+                )}
+                {sp.status === 'deceased' && sp.burial_place && (
+                  <Text className="block text-xs text-center" style={{ color: '#999' }}>葬：{sp.burial_place}</Text>
+                )}
+                {sp.bio && <Text className="block text-xs text-center" style={{ color: '#999' }}>{sp.bio}</Text>}
               </View>
             </View>
           ))}

@@ -16,6 +16,16 @@ interface FamilyInfo {
   description: string | null;
 }
 
+interface SpouseInfo {
+  id?: string;
+  name: string;
+  status?: string;
+  birth_date?: string | null;
+  death_date?: string | null;
+  bio?: string | null;
+  burial_place?: string | null;
+}
+
 interface Member {
   id: string;
   name: string;
@@ -29,6 +39,7 @@ interface Member {
   bio: string | null;
   birth_place: string | null;
   burial_place: string | null;
+  spouses?: SpouseInfo[];
 }
 
 interface CulturalItem {
@@ -248,11 +259,34 @@ export default function ExportPreview() {
                           生卒：{member.birth_date || '未知'}
                           {member.death_date ? ` - ${member.death_date}` : member.is_alive === 'yes' ? ' - 健在' : ' - 已故'}
                         </Text>
-                        {member.spouse_name && (
+                        {(member.spouses && member.spouses.length > 0) ? (
+                          member.spouses.map((sp, si) => (
+                            <View key={sp.id || si}>
+                              <Text className="block text-sm" style={{ color: '#6B5B4F', fontFamily: 'STKaiti, KaiTi, serif' }}>
+                                配偶：{sp.name}{sp.status === 'deceased' ? '（故）' : sp.status === 'divorced' ? '（离异）' : ''}
+                              </Text>
+                              {(sp.birth_date || (sp.status === 'deceased' && sp.death_date)) && (
+                                <Text className="block text-sm" style={{ color: '#999', fontFamily: 'STKaiti, KaiTi, serif' }}>
+                                  　生卒：{sp.birth_date || '生失考'}{sp.status === 'deceased' ? ` - ${sp.death_date || '卒失考'}` : ''}
+                                </Text>
+                              )}
+                              {sp.status === 'deceased' && sp.burial_place && (
+                                <Text className="block text-sm" style={{ color: '#999', fontFamily: 'STKaiti, KaiTi, serif' }}>
+                                  　葬地：{sp.burial_place}
+                                </Text>
+                              )}
+                              {sp.bio && (
+                                <Text className="block text-sm" style={{ color: '#999', fontFamily: 'STKaiti, KaiTi, serif' }}>
+                                  　简介：{sp.bio}
+                                </Text>
+                              )}
+                            </View>
+                          ))
+                        ) : member.spouse_name ? (
                           <Text className="block text-sm" style={{ color: '#6B5B4F', fontFamily: 'STKaiti, KaiTi, serif' }}>
                             配偶：{member.spouse_name}
                           </Text>
-                        )}
+                        ) : null}
                         {member.birth_place && (
                           <Text className="block text-sm" style={{ color: '#6B5B4F', fontFamily: 'STKaiti, KaiTi, serif' }}>
                             出生地：{member.birth_place}

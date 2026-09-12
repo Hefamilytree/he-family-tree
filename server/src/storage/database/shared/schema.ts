@@ -177,6 +177,8 @@ export const spouses = pgTable(
     status: varchar("status", { length: 20 }).notNull().default("alive"),
     birth_date: varchar("birth_date", { length: 20 }),
     death_date: varchar("death_date", { length: 20 }),
+    bio: text("bio"),
+    burial_place: varchar("burial_place", { length: 255 }),
     created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
