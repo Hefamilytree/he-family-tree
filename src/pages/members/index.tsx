@@ -466,6 +466,29 @@ export default function Members() {
                 )}
               </View>
 
+              <View className="mb-3">
+                <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>出生地</Text>
+                <View className="bg-[#FFFDF7] rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
+                  <Input className="w-full bg-transparent" placeholder="请输入出生地" value={formBirthPlace} onInput={(e) => setFormBirthPlace(e.detail.value)} />
+                </View>
+              </View>
+
+              {formIsAlive === 'no' && (
+                <View className="mb-3">
+                  <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>葬地（留空则记为「葬地不详」）</Text>
+                  <View className="bg-[#FFFDF7] rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
+                    <Input className="w-full bg-transparent" placeholder="请输入葬地" value={formBurialPlace} onInput={(e) => setFormBurialPlace(e.detail.value)} />
+                  </View>
+                </View>
+              )}
+
+              <View className="mb-4">
+                <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>简介</Text>
+                <View className="bg-[#FFFDF7] rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
+                  <Textarea className="w-full bg-transparent" style={{ minHeight: 64 }} placeholder="请输入简介（生平、事迹等）" value={formBio} onInput={(e) => setFormBio(e.detail.value)} />
+                </View>
+              </View>
+
               {/* 多配偶 */}
               <View className="mb-3">
                 <View className="flex items-center justify-between mb-1">
@@ -541,29 +564,6 @@ export default function Members() {
                     </View>
                   </View>
                 ))}
-              </View>
-
-              <View className="mb-3">
-                <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>出生地</Text>
-                <View className="bg-[#FFFDF7] rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
-                  <Input className="w-full bg-transparent" placeholder="请输入出生地" value={formBirthPlace} onInput={(e) => setFormBirthPlace(e.detail.value)} />
-                </View>
-              </View>
-
-              {formIsAlive === 'no' && (
-                <View className="mb-3">
-                  <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>葬地（留空则记为「葬地不详」）</Text>
-                  <View className="bg-[#FFFDF7] rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
-                    <Input className="w-full bg-transparent" placeholder="请输入葬地" value={formBurialPlace} onInput={(e) => setFormBurialPlace(e.detail.value)} />
-                  </View>
-                </View>
-              )}
-
-              <View className="mb-4">
-                <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>简介</Text>
-                <View className="bg-[#FFFDF7] rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
-                  <Textarea className="w-full bg-transparent" style={{ minHeight: 64 }} placeholder="请输入简介（生平、事迹等）" value={formBio} onInput={(e) => setFormBio(e.detail.value)} />
-                </View>
               </View>
 
               <View className="flex gap-3">
