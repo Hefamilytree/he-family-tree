@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { toLunarBirth } from '@/utils/lunar';
 import { Network } from '@/network';
 
 interface Spouse {
@@ -625,8 +626,8 @@ export default function Members() {
                           </Text>
                         </View>
                         <Text className="block text-xs" style={{ color: '#999' }}>
-                          {member.birth_date || '未知'}
-                          {member.death_date ? ` - ${member.death_date}` : member.is_alive === 'yes' ? ' - 健在' : ' - 已故'}
+                          {toLunarBirth(member.birth_date) || '未知'}
+                          {member.death_date ? ` - ${toLunarBirth(member.death_date)}` : member.is_alive === 'yes' ? ' - 健在' : ' - 已故'}
                         </Text>
                         {renderSpouseText(member)}
                         {member.parent_name && (

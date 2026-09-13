@@ -5,11 +5,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Network } from '@/network';
+import { MessageCircle } from 'lucide-react-taro';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [wxLoading, setWxLoading] = useState(false);
+
+  const isMiniApp = [Taro.ENV_TYPE.WEAPP, Taro.ENV_TYPE.TT].includes(Taro.getEnv() as any);
 
   useLoad(() => {
     console.log('LoginPage loaded');
@@ -56,6 +60,48 @@ export default function LoginPage() {
     Taro.navigateTo({ url: '/pages/register/index' });
   };
 
+  const handleWechatLogin = async () => {
+    if (!isMiniApp) {
+      Taro.showToast({ title: '请在微信小程序中使用微信一键登录', icon: 'none' });
+      return;
+    }
+    setWxLoading(true);
+    try {
+      const loginRes: any = await Taro.login();
+      if (!loginRes || !loginRes.code) {
+        Taro.showToast({ title: '获取微信授权失败', icon: 'none' });
+        return;
+      }
+      const res = await Network.request({
+        url: '/api/auth/wechat-login',
+        method: 'POST',
+        data: { code: loginRes.code },
+      });
+      console.log('WeChat login response:', res.data);
+      if (res.data.code === 200) {
+        Taro.setStorageSync('token', res.data.data.token);
+        Taro.setStorageSync('userInfo', res.data.data.user);
+        Taro.showToast({ title: '登录成功', icon: 'success' });
+        // 未关联宗亲成员时，跳转完善信息
+        setTimeout(() => {
+          const user: any = res.data.data.user;
+          if (user && !user.member_id) {
+            Taro.navigateTo({ url: '/pages/register/index?from=wechat' });
+          } else {
+            Taro.navigateBack();
+          }
+        }, 1500);
+      } else {
+        Taro.showToast({ title: res.data.msg || '微信登录失败', icon: 'none' });
+      }
+    } catch (error) {
+      console.error('WeChat login error:', error);
+      Taro.showToast({ title: '网络错误', icon: 'none' });
+    } finally {
+      setWxLoading(false);
+    }
+  };
+
   return (
     <View className="min-h-screen bg-amber-50 px-4 py-8">
       {/* 标题区域 */}
@@ -99,6 +145,22 @@ export default function LoginPage() {
             disabled={loading}
           >
             <Text>{loading ? '登录中...' : '登录'}</Text>
+          </Button>
+
+          {/* 分隔线 */}
+          <View className="flex flex-row items-center my-2">
+            <View className="flex-1 h-px bg-stone-200" />
+            <Text className="px-3 text-xs text-stone-400">或</Text>
+            <View className="flex-1 h-px bg-stone-200" />
+          </View>
+
+          <Button
+            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+            onClick={handleWechatLogin}
+            disabled={wxLoading}
+          >
+            <MessageCircle size={18} color="#ffffff" className="mr-2" />
+            <Text>{wxLoading ? '授权中...' : '微信一键登录'}</Text>
           </Button>
 
           <View className="text-center pt-4">

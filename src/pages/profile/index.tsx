@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro, { useLoad, useDidShow } from '@tarojs/taro';
-import { User, Info, Heart, MapPin, LogIn, LogOut, Shield, House } from 'lucide-react-taro';
+import { User, Heart, MapPin, LogIn, LogOut, Shield, UserPlus } from 'lucide-react-taro';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import {
   Dialog,
@@ -20,17 +19,12 @@ const ProfilePage = () => {
   const [userInfo, setUserInfo] = useState<any>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  // 创建家族弹窗
-  const [showFamilyDialog, setShowFamilyDialog] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [familyForm, setFamilyForm] = useState({
-    surname: '',
-    family_name: '',
-    hall_name: '',
-    motto: '',
-    description: '',
-    origin: '',
-  });
+  // 完善宗亲信息（关联宗亲树人员）
+  const [showLinkDialog, setShowLinkDialog] = useState(false);
+  const [linking, setLinking] = useState(false);
+  const [linkKeyword, setLinkKeyword] = useState('');
+  const [memberOptions, setMemberOptions] = useState<any[]>([]);
+  const [memberOptionsLoaded, setMemberOptionsLoaded] = useState(false);
 
   useLoad(() => {
     console.log('ProfilePage loaded');
@@ -78,64 +72,65 @@ const ProfilePage = () => {
     });
   };
 
-  const handleClearData = () => {
+  const handleOpenLink = () => {
     if (!isLoggedIn) {
       Taro.showToast({ title: '请先登录', icon: 'none' });
       return;
     }
-    Taro.showModal({
-      title: '提示',
-      content: '此功能需要联系管理员进行数据清理。',
-      showCancel: false,
-    });
+    setLinkKeyword('');
+    setMemberOptions([]);
+    setMemberOptionsLoaded(false);
+    setShowLinkDialog(true);
   };
 
-  const handleOpenCreateFamily = () => {
-    if (!isLoggedIn) {
-      Taro.showToast({ title: '请先登录', icon: 'none' });
-      return;
-    }
-    setFamilyForm({ surname: '', family_name: '', hall_name: '', motto: '', description: '', origin: '' });
-    setShowFamilyDialog(true);
-  };
-
-  const handleCreateFamily = async () => {
-    if (!familyForm.surname.trim()) {
-      Taro.showToast({ title: '请填写姓氏', icon: 'none' });
-      return;
-    }
-    if (!familyForm.family_name.trim()) {
-      Taro.showToast({ title: '请填写家族名称', icon: 'none' });
-      return;
-    }
-    setSubmitting(true);
+  const handleSearchMembers = async (keyword: string) => {
+    setLinkKeyword(keyword);
+    setMemberOptionsLoaded(true);
     try {
       const token = Taro.getStorageSync('token');
       const res = await Network.request({
-        url: '/api/family',
-        method: 'POST',
-        data: {
-          surname: familyForm.surname.trim(),
-          family_name: familyForm.family_name.trim(),
-          hall_name: familyForm.hall_name.trim() || null,
-          motto: familyForm.motto.trim() || null,
-          description: familyForm.description.trim() || null,
-          origin: familyForm.origin.trim() || null,
-        },
+        url: '/api/members',
+        method: 'GET',
         header: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      console.log('创建家族响应:', res.data);
+      console.log('关联宗亲-成员列表:', res.data);
+      const list = (res.data?.data || res.data?.data?.list || []) as any[];
+      const kw = keyword.trim();
+      setMemberOptions(
+        kw ? list.filter((m: any) => (m.name || '').includes(kw)) : list
+      );
+    } catch (error) {
+      console.error('获取成员列表失败:', error);
+      setMemberOptions([]);
+    }
+  };
+
+  const handleLinkMember = async (member: any) => {
+    if (!userInfo?.id || !member?.id) return;
+    setLinking(true);
+    try {
+      const token = Taro.getStorageSync('token');
+      const res = await Network.request({
+        url: '/api/auth/link-member',
+        method: 'POST',
+        data: { userId: userInfo.id, memberId: member.id, name: member.name },
+        header: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      console.log('关联宗亲响应:', res.data);
       if (res.data?.code === 200) {
-        Taro.showToast({ title: '家族创建成功', icon: 'success' });
-        setShowFamilyDialog(false);
+        const updated = { ...userInfo, member_id: member.id, member_name: member.name };
+        setUserInfo(updated);
+        Taro.setStorageSync('userInfo', updated);
+        setShowLinkDialog(false);
+        Taro.showToast({ title: '关联成功', icon: 'success' });
       } else {
-        Taro.showToast({ title: res.data?.msg || '创建失败', icon: 'none' });
+        Taro.showToast({ title: res.data?.msg || '关联失败', icon: 'none' });
       }
     } catch (error) {
-      console.error('创建家族失败:', error);
-      Taro.showToast({ title: '网络错误，创建失败', icon: 'none' });
+      console.error('关联宗亲失败:', error);
+      Taro.showToast({ title: '网络错误，关联失败', icon: 'none' });
     } finally {
-      setSubmitting(false);
+      setLinking(false);
     }
   };
 
@@ -307,38 +302,21 @@ const ProfilePage = () => {
         </Card>
 
         <Card
-          className="bg-amber-50 border-stone-200 active:opacity-80"
-          onClick={handleOpenCreateFamily}
+          className="bg-red-900 border-red-800 text-white active:opacity-80"
+          onClick={handleOpenLink}
         >
           <CardContent className="p-4 flex items-center gap-3">
-            <View className="w-10 h-10 rounded-full bg-amber-700 flex items-center justify-center">
-              <House size={20} color="#FFFDF7" />
+            <View className="w-10 h-10 rounded-full bg-white bg-opacity-20 flex items-center justify-center">
+              <UserPlus size={20} color="#FFD9C8" />
             </View>
             <View className="flex-1">
-              <Text className="block text-base font-semibold text-stone-800">
-                创建家族
+              <Text className="block text-base font-semibold text-white">
+                完善宗亲信息
               </Text>
-              <Text className="block text-sm text-stone-500">
-                数据管理 · 创建家族堂号，建立族谱根基
-              </Text>
-            </View>
-          </CardContent>
-        </Card>
-
-        <Card
-          className="bg-amber-50 border-stone-200 active:opacity-80"
-          onClick={handleClearData}
-        >
-          <CardContent className="p-4 flex items-center gap-3">
-            <View className="w-10 h-10 rounded-full bg-stone-600 flex items-center justify-center">
-              <Info size={20} color="#FFFDF7" />
-            </View>
-            <View className="flex-1">
-              <Text className="block text-base font-semibold text-stone-800">
-                数据管理
-              </Text>
-              <Text className="block text-sm text-stone-500">
-                联系管理员进行数据清理
+              <Text className="block text-sm text-red-100">
+                {userInfo?.member_name
+                  ? `已关联：${userInfo.member_name}（点击重新关联）`
+                  : '登录后关联宗亲树人员，完善您的族谱身份'}
               </Text>
             </View>
           </CardContent>
@@ -374,82 +352,67 @@ const ProfilePage = () => {
         </Text>
       </View>
 
-      {/* 创建家族弹窗 */}
-      <Dialog open={showFamilyDialog} onOpenChange={setShowFamilyDialog}>
+      {/* 完善宗亲信息 / 关联宗亲弹窗 */}
+      <Dialog open={showLinkDialog} onOpenChange={setShowLinkDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              <Text className="block text-lg font-bold text-stone-800">创建家族</Text>
+              <Text className="block text-lg font-bold text-stone-800">完善宗亲信息</Text>
             </DialogTitle>
           </DialogHeader>
 
           <View className="space-y-3 mt-2">
+            <Text className="block text-sm text-stone-500">
+              请填写您的姓名，或输入关键字筛选宗亲树中的成员，将自己关联到对应的族谱世系中。
+            </Text>
             <View>
-              <Label><Text className="block text-sm text-stone-600 mb-1">姓氏 *</Text></Label>
+              <Label><Text className="block text-sm text-stone-600 mb-1">您的姓名 / 关键字</Text></Label>
               <Input
                 className="bg-stone-50"
-                placeholder="如：何"
-                value={familyForm.surname}
-                onInput={(e) => setFamilyForm({ ...familyForm, surname: e.detail.value })}
+                placeholder="输入姓名或关键字搜索"
+                value={linkKeyword}
+                onInput={(e) => handleSearchMembers(e.detail.value)}
               />
             </View>
-            <View>
-              <Label><Text className="block text-sm text-stone-600 mb-1">家族名称 *</Text></Label>
-              <Input
-                className="bg-stone-50"
-                placeholder="如：何氏家族"
-                value={familyForm.family_name}
-                onInput={(e) => setFamilyForm({ ...familyForm, family_name: e.detail.value })}
-              />
-            </View>
-            <View>
-              <Label><Text className="block text-sm text-stone-600 mb-1">家族堂号</Text></Label>
-              <Input
-                className="bg-stone-50"
-                placeholder="如：庐江堂"
-                value={familyForm.hall_name}
-                onInput={(e) => setFamilyForm({ ...familyForm, hall_name: e.detail.value })}
-              />
-            </View>
-            <View>
-              <Label><Text className="block text-sm text-stone-600 mb-1">家训</Text></Label>
-              <Input
-                className="bg-stone-50"
-                placeholder="如：忠孝传家，耕读继世"
-                value={familyForm.motto}
-                onInput={(e) => setFamilyForm({ ...familyForm, motto: e.detail.value })}
-              />
-            </View>
-            <View>
-              <Label><Text className="block text-sm text-stone-600 mb-1">家族起源</Text></Label>
-              <Textarea
-                className="bg-stone-50 min-h-24"
-                placeholder="家族发源地、迁徙源流等"
-                value={familyForm.origin}
-                onInput={(e) => setFamilyForm({ ...familyForm, origin: e.detail.value })}
-              />
-            </View>
-            <View>
-              <Label><Text className="block text-sm text-stone-600 mb-1">家族简介</Text></Label>
-              <Textarea
-                className="bg-stone-50 min-h-24"
-                placeholder="简要介绍家族情况"
-                value={familyForm.description}
-                onInput={(e) => setFamilyForm({ ...familyForm, description: e.detail.value })}
-              />
+
+            <View className="max-h-80 overflow-y-auto space-y-2">
+              {memberOptionsLoaded && memberOptions.length === 0 ? (
+                <Text className="block text-sm text-stone-400 text-center py-4">
+                  未找到匹配的宗亲，请检查姓名或联系管理员录入。
+                </Text>
+              ) : (
+                memberOptions.map((m: any) => (
+                  <View
+                    key={m.id}
+                    className="flex items-center justify-between px-3 py-2 rounded-lg border border-stone-200 bg-white"
+                    onClick={() => handleLinkMember(m)}
+                  >
+                    <View>
+                      <Text className="block text-sm font-semibold text-stone-800">
+                        {m.name || m.username || '未署名'}
+                      </Text>
+                      <Text className="block text-xs text-stone-500 mt-1">
+                        {m.generation_title || (m.generation ? `第${m.generation}世` : '')}
+                        {m.birth_date || m.death_date ? ` · ${m.birth_date || ''}${m.birth_date && m.death_date ? '-' : ''}${m.death_date || ''}` : ''}
+                      </Text>
+                    </View>
+                    <Button
+                      size="sm"
+                      className="bg-amber-700 text-white"
+                      disabled={linking}
+                      onClick={() => handleLinkMember(m)}
+                    >
+                      <Text>关联</Text>
+                    </Button>
+                  </View>
+                ))
+              )}
             </View>
           </View>
 
           <DialogFooter className="mt-4">
-            <Button variant="outline" onClick={() => setShowFamilyDialog(false)}>
-              <Text>取消</Text>
-            </Button>
-            <Button
-              className="bg-amber-700 text-white"
-              disabled={submitting}
-              onClick={handleCreateFamily}
-            >
-              <Text>{submitting ? '创建中...' : '确认创建'}</Text>
+            <Button variant="outline" onClick={() => setShowLinkDialog(false)}>
+              <Text>关闭</Text>
             </Button>
           </DialogFooter>
         </DialogContent>

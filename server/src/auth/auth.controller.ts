@@ -70,4 +70,35 @@ export class AuthController {
     }
     return this.authService.setAdmin(userId);
   }
+
+  @Post('wechat-login')
+  @HttpCode(HttpStatus.OK)
+  async wechatLogin(@Body() body: { code: string; nickname?: string; avatar_url?: string }) {
+    const { code, nickname, avatar_url } = body;
+    if (!code) {
+      return { code: 400, msg: '微信登录 code 不能为空', data: null };
+    }
+    return this.authService.wechatLogin(code, nickname, avatar_url);
+  }
+
+  @Post('link-member')
+  @HttpCode(HttpStatus.OK)
+  async linkMember(
+    @Headers('authorization') authorization: string,
+    @Body() body: { memberId: string }
+  ) {
+    if (!authorization) {
+      return { code: 401, msg: '未登录', data: null };
+    }
+    const token = authorization.replace('Bearer ', '');
+    const decoded = this.authService.verifyToken(token) as any;
+    if (!decoded) {
+      return { code: 401, msg: 'token 无效或已过期', data: null };
+    }
+    const { memberId } = body;
+    if (!memberId) {
+      return { code: 400, msg: '请选择要关联的宗亲', data: null };
+    }
+    return this.authService.linkMember(decoded.userId, memberId);
+  }
 }

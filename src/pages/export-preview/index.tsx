@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { View, Text } from '@tarojs/components';
-import Taro, { useRouter, useDidShow } from '@tarojs/taro';
+import Taro, { useRouter, useDidShow, useShareAppMessage } from '@tarojs/taro';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { toLunarBirth } from '@/utils/lunar';
 import { Share2 } from 'lucide-react-taro';
 import { Network } from '@/network';
 
@@ -75,6 +76,14 @@ export default function ExportPreview() {
   const [family, setFamily] = useState<FamilyInfo | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [culturalItems, setCulturalItems] = useState<CulturalItem[]>([]);
+  const isMiniApp = [Taro.ENV_TYPE.WEAPP, Taro.ENV_TYPE.TT].includes(Taro.getEnv() as any);
+
+  // 微信右上角分享 / 好友分享
+  useShareAppMessage(() => ({
+    title: `${family?.family_name || '何氏'}族谱`,
+    path: `/pages/index/index`,
+  }));
+
   const [loading, setLoading] = useState(true);
 
   const loadData = async () => {
@@ -173,8 +182,21 @@ export default function ExportPreview() {
   const sortedGens = Object.keys(generations).map(Number).sort((a, b) => a - b);
 
   const handleShare = () => {
-    Taro.showToast({ title: '请使用截图功能保存', icon: 'none' });
+    const url = typeof window !== 'undefined' ? window.location.href : '';
+    if (isMiniApp) {
+      Taro.showToast({ title: '点击右上角「···」即可转发给微信好友', icon: 'none' });
+      return;
+    }
+    const nav = (navigator as any);
+    if (nav && typeof nav.share === 'function') {
+      nav.share({ title: `${family?.family_name || '何氏'}族谱`, text: '誠邀您查阅族谱世系', url })
+        .catch(() => Taro.showToast({ title: '分享未完成', icon: 'none' }));
+    } else {
+      Taro.showToast({ title: '请截图保存后分享', icon: 'none' });
+    }
   };
+
+  const bodyCount = Object.values(generations).reduce((n, arr) => n + (arr ? arr.length : 0), 0);
 
   if (loading) {
     return (
@@ -197,6 +219,61 @@ export default function ExportPreview() {
             <Share2 size={14} color="#8B2500" />
             <Text className="text-xs ml-1">分享</Text>
           </Button>
+        </View>
+      </View>
+
+      {/* 封面页 */}
+      <View className="px-4 mb-4">
+        <View
+          style={{
+            backgroundColor: '#FBF6EE',
+            border: '3px double #8B2500',
+            padding: '40px 16px', minHeight: '560px',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <Text className="block text-center" style={{ color: '#8B2500', fontFamily: 'STKaiti, KaiTi, serif', fontSize: '26px', letterSpacing: '10px', marginBottom: '20px' }}>
+            {family?.hall_name || ''}
+          </Text>
+          <View style={{ width: '64px', borderBottom: '2px solid #8B2500', marginBottom: '22px' }} />
+          <Text className="block text-center font-bold" style={{ color: '#8B2500', fontFamily: 'STKaiti, KaiTi, serif', fontSize: '46px', letterSpacing: '14px' }}>
+            {family?.family_name || '何氏'}族谱
+          </Text>
+          <View style={{ width: '64px', borderBottom: '2px solid #8B2500', marginTop: '26px', marginBottom: '24px' }} />
+          <Text className="block text-center" style={{ color: '#6B5B4F', fontFamily: 'STKaiti, KaiTi, serif', fontSize: '17px', letterSpacing: '4px' }}>
+            {`公元${new Date().getFullYear()}年重修`}
+          </Text>
+        </View>
+      </View>
+
+      {/* 索引表（目录）页 */}
+      <View className="px-4 mb-4">
+        <View style={{ backgroundColor: '#FFFDF7', border: '2px solid #8B2500', padding: '22px' }}>
+          <Text className="block text-center text-xl font-bold mb-5" style={{ color: '#8B2500', fontFamily: 'STKaiti, KaiTi, serif' }}>
+            目 录
+          </Text>
+          <Text className="block text-sm font-bold mb-2" style={{ color: '#8B2500', fontFamily: 'STKaiti, KaiTi, serif' }}>卷首</Text>
+          {frontSections.map((s, i) => (
+            <View key={`f${i}`} className="flex" style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 3 }}>
+              <Text style={{ fontFamily: 'STKaiti, KaiTi, serif', fontSize: '14px' }}>{s.label}</Text>
+            </View>
+          ))}
+          {frontSections.length === 0 && (
+            <Text style={{ fontFamily: 'STKaiti, KaiTi, serif', fontSize: '13px', color: '#999' }}>（暂无前置内容）</Text>
+          )}
+          <Text className="block text-sm font-bold mt-4 mb-2" style={{ color: '#8B2500', fontFamily: 'STKaiti, KaiTi, serif' }}>世系</Text>
+          <View className="flex" style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 3 }}>
+            <Text style={{ fontFamily: 'STKaiti, KaiTi, serif', fontSize: '14px' }}>第 1-{sortedGens.length || 1} 世（录入 {bodyCount} 位在世系）</Text>
+          </View>
+          <Text className="block text-sm font-bold mt-4 mb-2" style={{ color: '#8B2500', fontFamily: 'STKaiti, KaiTi, serif' }}>卷末</Text>
+          {backSections.map((s, i) => (
+            <View key={`b${i}`} className="flex" style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 3 }}>
+              <Text style={{ fontFamily: 'STKaiti, KaiTi, serif', fontSize: '14px' }}>{s.label}</Text>
+            </View>
+          ))}
+          {backSections.length === 0 && (
+            <Text style={{ fontFamily: 'STKaiti, KaiTi, serif', fontSize: '13px', color: '#999' }}>（暂无卷末内容）</Text>
+          )}
         </View>
       </View>
 
@@ -256,8 +333,8 @@ export default function ExportPreview() {
 
                       <View className="space-y-1">
                         <Text className="block text-sm" style={{ color: '#6B5B4F', fontFamily: 'STKaiti, KaiTi, serif' }}>
-                          生卒：{member.birth_date || '未知'}
-                          {member.death_date ? ` - ${member.death_date}` : member.is_alive === 'yes' ? ' - 健在' : ' - 已故'}
+                          生卒（农历）：{(member.birth_date ? toLunarBirth(member.birth_date) : '') || '未知'}
+                          {member.death_date ? ` - ${toLunarBirth(member.death_date)}` : member.is_alive === 'yes' ? ' - 健在' : ' - 已故'}
                         </Text>
                         {(member.spouses && member.spouses.length > 0) ? (
                           member.spouses.map((sp, si) => (
@@ -267,7 +344,7 @@ export default function ExportPreview() {
                               </Text>
                               {(sp.birth_date || (sp.status === 'deceased' && sp.death_date)) && (
                                 <Text className="block text-sm" style={{ color: '#999', fontFamily: 'STKaiti, KaiTi, serif' }}>
-                                  　生卒：{sp.birth_date || '生失考'}{sp.status === 'deceased' ? ` - ${sp.death_date || '卒失考'}` : ''}
+                                  　生卒（农历）：{(sp.birth_date ? toLunarBirth(sp.birth_date) : '') || '生失考'}{sp.status === 'deceased' ? ` - ${(sp.death_date ? toLunarBirth(sp.death_date) : '') || '卒失考'}` : ''}
                                 </Text>
                               )}
                               {sp.status === 'deceased' && sp.burial_place && (

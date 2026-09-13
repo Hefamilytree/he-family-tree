@@ -61,6 +61,9 @@ importers:
       lucide-react-taro:
         specifier: ^1.4.1
         version: 1.4.1(@tarojs/components@4.1.9(@tarojs/helper@4.1.9)(@types/react@18.3.27)(postcss@8.5.6)(rollup@3.29.5)(webpack@5.97.1(@swc/core@1.3.96)))(react@18.3.1)
+      lunar-javascript:
+        specifier: ^1.7.7
+        version: 1.7.7
       react:
         specifier: ^18.0.0
         version: 18.3.1
@@ -2132,7 +2135,7 @@ packages:
 
   '@esbuild-kit/core-utils@3.3.2':
     resolution: {integrity: sha512-sPRAnw9CdSsRmEtnsl2WXWdyquogVpB3yZ3dgwJfe8zrOzTsV7cJvmwrKVa+0ma5BoiGJ+BoqkMvawbayKUsqQ==}
-    deprecated: 'Merged into tsx: https://tsx.is'
+    deprecated: 'Merged into tsx: https://tsx.hirok.io'
 
   '@esbuild-kit/esm-loader@2.6.5':
     resolution: {integrity: sha512-FxEMIkJKnodyA1OaCUoEvbYRkoZlLZ4d/eXFu9Fh8CbBBgP5EmZxrfTRyN0qpXZ4vOvqnE5YdRdcrmUUXuU+dA==}
@@ -7764,6 +7767,9 @@ packages:
     peerDependencies:
       '@tarojs/components': '>=3.0.0'
       react: '>=16.8.0'
+
+  lunar-javascript@1.7.7:
+    resolution: {integrity: sha512-u/KYiwPIBo/0bT+WWfU7qO1d+aqeB90Tuy4ErXenr2Gam0QcWeezUvtiOIyXR7HbVnW2I1DKfU0NBvzMZhbVQw==}
 
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
@@ -19844,6 +19850,8 @@ snapshots:
       fuse.js: 7.1.0
       react: 18.3.1
       sharp: 0.33.5
+
+  lunar-javascript@1.7.7: {}
 
   magic-string@0.30.21:
     dependencies:

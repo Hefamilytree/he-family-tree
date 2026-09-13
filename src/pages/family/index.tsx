@@ -5,6 +5,7 @@ import { TreePine } from 'lucide-react-taro';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Network } from '@/network';
+import { toLunarBirth } from '@/utils/lunar';
 import './index.css';
 
 interface FamilyInfo {
@@ -34,6 +35,8 @@ interface TreeNode {
   birth_date: string | null;
   death_date: string | null;
   spouse_name: string | null;
+  bio?: string | null;
+  burial_place?: string | null;
   spouses: SpouseInfo[];
   children: TreeNode[];
 }
@@ -113,6 +116,20 @@ export default function FamilyTree() {
                 {node.generation_title}字辈
               </Text>
             )}
+            <Text className="block text-xs text-center mt-1" style={{ color: '#555' }}>
+              {(node.birth_date ? toLunarBirth(node.birth_date) : '') || '生失考'}
+              {node.death_date ? `—${toLunarBirth(node.death_date)}` : node.is_alive === 'no' ? '—卒失考' : ''}
+            </Text>
+            {node.is_alive === 'no' && (node.burial_place || true) && (
+              <Text className="block text-xs text-center mt-1" style={{ color: '#999' }}>
+                葬：{node.burial_place || '不详'}
+              </Text>
+            )}
+            {node.bio ? (
+              <Text className="block text-xs text-center mt-1" style={{ color: '#999' }}>
+                {node.bio.length > 24 ? node.bio.slice(0, 24) + '…' : node.bio}
+              </Text>
+            ) : null}
             <Text className="block text-xs text-center mt-1" style={{ color: '#B0A090' }}>
               点击编辑
             </Text>
@@ -128,7 +145,7 @@ export default function FamilyTree() {
                 </Text>
                 {(sp.birth_date || (sp.status === 'deceased' && sp.death_date)) && (
                   <Text className="block text-xs text-center" style={{ color: '#999' }}>
-                    {sp.birth_date || '生失考'}{sp.status === 'deceased' ? `—${sp.death_date || '卒失考'}` : ''}
+                    {(sp.birth_date ? toLunarBirth(sp.birth_date) : '') || '生失考'}{sp.status === 'deceased' ? `—${(sp.death_date ? toLunarBirth(sp.death_date) : '') || '卒失考'}` : ''}
                   </Text>
                 )}
                 {sp.status === 'deceased' && sp.burial_place && (

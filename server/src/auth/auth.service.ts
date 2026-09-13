@@ -126,6 +126,7 @@ export class AuthService {
         role: data.role,
         family_id: data.family_id,
         avatar_url: data.avatar_url,
+        member_id: data.member_id,
       },
     };
   }
@@ -174,6 +175,97 @@ export class AuthService {
         username: data.username,
         role: data.role,
       },
+    };
+  }
+
+  async wechatLogin(code: string, nickname?: string, avatar_url?: string) {
+    const appid = process.env.WX_APPID;
+    const secret = process.env.WX_SECRET;
+    let openid: string | null = null;
+
+    if (appid && secret) {
+      try {
+        const url =
+          `https://api.weixin.qq.com/sns/jscode2session?appid=${appid}` +
+          `&secret=${secret}&js_code=${encodeURIComponent(code)}&grant_type=authorization_code`;
+        const res = await fetch(url);
+        const json = (await res.json()) as any;
+        if (json.openid) {
+          openid = json.openid;
+        } else {
+          return { code: 500, msg: '微信登录失败：' + (json.errmsg || 'code 无效'), data: null };
+        }
+      } catch (e) {
+        return { code: 500, msg: '微信登录失败，请稍后重试', data: null };
+      }
+    } else {
+      // 未配置 WX_APPID/WX_SECRET 时（开发/本地环境）使用 code 作为降级标识
+      openid = `wx_dev_${code}`;
+    }
+
+    let user: any = null;
+    const { data: existing } = await this.supabase.from('users').select('*').eq('openid', openid).maybeSingle();
+    if (existing) {
+      user = existing;
+    } else {
+      const password_hash = await bcrypt.hash(String(Math.random() * 1e10), 10);
+      const { data: created, error } = await this.supabase
+        .from('users')
+        .insert({
+          openid: openid!,
+          username: `wx_${(openid || 'wx').slice(-8)}`,
+          nickname: nickname || '微信用户',
+          password_hash,
+          role: 'member',
+          avatar_url: avatar_url || null,
+        })
+        .select()
+        .single();
+      if (error) {
+        return { code: 500, msg: '微信登录失败，请重试', data: null };
+      }
+      user = created;
+    }
+
+    const token = jwt.sign(
+      { userId: user.id, username: user.username, role: user.role, member_id: user.member_id },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    return {
+      code: 200,
+      msg: '登录成功',
+      data: {
+        user: {
+          id: user.id,
+          username: user.username,
+          nickname: user.nickname,
+          role: user.role,
+          member_id: user.member_id,
+        },
+        token,
+      },
+    };
+  }
+
+  async linkMember(userId: string, memberId: string) {
+    if (!userId || !memberId) {
+      return { code: 400, msg: '参数不完整', data: null };
+    }
+    const { data, error } = await this.supabase
+      .from('users')
+      .update({ member_id: memberId })
+      .eq('id', userId)
+      .select()
+      .single();
+    if (error) {
+      return { code: 500, msg: '关联失败，请重试', data: null };
+    }
+    return {
+      code: 200,
+      msg: '关联成功',
+      data: { id: data.id, username: data.username, role: data.role, member_id: data.member_id },
     };
   }
 
