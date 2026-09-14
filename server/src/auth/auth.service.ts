@@ -127,6 +127,8 @@ export class AuthService {
         family_id: data.family_id,
         avatar_url: data.avatar_url,
         member_id: data.member_id,
+        phone: data.phone,
+        residence: data.residence,
       },
     };
   }
@@ -249,13 +251,13 @@ export class AuthService {
     };
   }
 
-  async linkMember(userId: string, memberId: string) {
+  async linkMember(userId: string, memberId: string, phone?: string, residence?: string) {
     if (!userId || !memberId) {
       return { code: 400, msg: '参数不完整', data: null };
     }
     const { data, error } = await this.supabase
       .from('users')
-      .update({ member_id: memberId })
+      .update({ member_id: memberId, phone: phone || null, residence: residence || null })
       .eq('id', userId)
       .select()
       .single();
@@ -265,8 +267,38 @@ export class AuthService {
     return {
       code: 200,
       msg: '关联成功',
-      data: { id: data.id, username: data.username, role: data.role, member_id: data.member_id },
+      data: {
+        id: data.id,
+        username: data.username,
+        role: data.role,
+        member_id: data.member_id,
+        phone: data.phone,
+        residence: data.residence,
+      },
     };
+  }
+
+  async clearAllData(userId: string) {
+    const { data: me, error: meErr } = await this.supabase
+      .from('users')
+      .select('id, role')
+      .eq('id', userId)
+      .single();
+    if (meErr || !me || me.role !== 'admin') {
+      return { code: 403, msg: '仅主管理员可清除全部数据', data: null };
+    }
+    const tables = ['spouses', 'comments', 'registrations', 'economic_development', 'harmony_activities', 'cultural_heritage', 'members'];
+    for (const t of tables) {
+      const { error } = await this.supabase.from(t).delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      if (error) {
+        return { code: 500, msg: `清除${t}失败`, data: null };
+      }
+    }
+    const { error: famErr } = await this.supabase.from('families').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    if (famErr) {
+      return { code: 500, msg: '清除家族失败', data: null };
+    }
+    return { code: 200, msg: '已清除全部家族数据', data: null };
   }
 
   verifyToken(token: string) {

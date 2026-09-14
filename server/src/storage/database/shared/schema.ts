@@ -127,6 +127,8 @@ export const users = pgTable(
     avatar_url: text("avatar_url"),
     openid: varchar("openid", { length: 128 }),
     member_id: varchar("member_id", { length: 36 }).references(() => members.id, { onDelete: "set null" }),
+    phone: varchar("phone", { length: 32 }),
+    residence: varchar("residence", { length: 255 }),
     created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updated_at: timestamp("updated_at", { withTimezone: true }),
   },

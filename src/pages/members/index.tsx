@@ -629,6 +629,11 @@ export default function Members() {
                           {toLunarBirth(member.birth_date) || '未知'}
                           {member.death_date ? ` - ${toLunarBirth(member.death_date)}` : member.is_alive === 'yes' ? ' - 健在' : ' - 已故'}
                         </Text>
+                        {member.burial_place && member.is_alive === 'no' && (
+                          <Text className="block text-xs mt-1" style={{ color: '#6B5B4F' }}>
+                            葬地：{member.burial_place}
+                          </Text>
+                        )}
                         {renderSpouseText(member)}
                         {member.parent_name && (
                           <Text className="block text-xs" style={{ color: '#6B5B4F' }}>
@@ -638,11 +643,6 @@ export default function Members() {
                         {member.birth_place && (
                           <Text className="block text-xs" style={{ color: '#6B5B4F' }}>
                             出生地：{member.birth_place}
-                          </Text>
-                        )}
-                        {member.burial_place && member.is_alive === 'no' && (
-                          <Text className="block text-xs" style={{ color: '#6B5B4F' }}>
-                            葬地：{member.burial_place}
                           </Text>
                         )}
                         {member.bio && (

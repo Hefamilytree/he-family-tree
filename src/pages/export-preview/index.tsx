@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toLunarBirth } from '@/utils/lunar';
-import { Share2 } from 'lucide-react-taro';
+import { Share2, FileText } from 'lucide-react-taro';
 import { Network } from '@/network';
 
 interface FamilyInfo {
@@ -72,6 +72,9 @@ export default function ExportPreview() {
   const router = useRouter();
   const mode = router.params.mode || 'full';
   const branchId = router.params.branch || '';
+  const includeAncestor = router.params.toAncestor || '1';
+  const startGen = router.params.startGen || '';
+  const endGen = router.params.endGen || '';
 
   const [family, setFamily] = useState<FamilyInfo | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
@@ -98,21 +101,43 @@ export default function ExportPreview() {
       setFamily(Array.isArray(familyPayload) ? (familyPayload.length > 0 ? familyPayload[0] : null) : (familyPayload || null));
 
       let memberList = membersRes.data?.data || [];
-      // 如果是分支模式，只获取该分支的成员
+      // 分支模式：由下往上，支持含祖先链 + 世数范围
       if (mode === 'branch' && branchId) {
         const allMembers = memberList;
-        const branchMembers: Member[] = [];
-        const queue = [branchId];
-        while (queue.length > 0) {
-          const currentId = queue.shift()!;
-          const member = allMembers.find(m => m.id === currentId);
-          if (member) {
-            branchMembers.push(member);
-            const children = allMembers.filter(m => m.parent_id === currentId);
-            children.forEach(child => queue.push(child.id));
+        const root = allMembers.find(m => m.id === branchId);
+        const picked: Member[] = [];
+        if (root) {
+          // 该分支的后代（由所选分支点向下）
+          const queue = [root.id];
+          while (queue.length > 0) {
+            const currentId = queue.shift()!;
+            const member = allMembers.find(m => m.id === currentId);
+            if (member) {
+              picked.push(member);
+              allMembers.filter(m => m.parent_id === currentId).forEach(child => queue.push(child.id));
+            }
           }
+          // 若需“到始祖”，向上补祖先链
+          if (includeAncestor === '1') {
+            let p = root;
+            let guard = 0;
+            while (p && p.parent_id && guard++ < 300) {
+              const pa = allMembers.find(m => m.id === p.parent_id);
+              if (!pa) break;
+              picked.push(pa);
+              p = pa;
+            }
+          }
+          // 世数范围过滤
+          const startG = parseInt(startGen || '', 10);
+          const endG = parseInt(endGen || '', 10);
+          let result = picked;
+          if (Number.isNaN(startG) === false) result = result.filter(m => (m.generation || 1) >= startG);
+          if (Number.isNaN(endG) === false) result = result.filter(m => (m.generation || 0) <= endG);
+          memberList = Array.from(new Map(result.map(m => [m.id, m])).values());
+        } else {
+          memberList = [];
         }
-        memberList = branchMembers;
       }
       setMembers(memberList);
 
@@ -196,6 +221,16 @@ export default function ExportPreview() {
     }
   };
 
+  const handlePrintPdf = () => {
+    if (isMiniApp) {
+      Taro.showToast({ title: '小程序可点击右上角「···」转发；生成PDF请用电脑端H5打开打印预览', icon: 'none', duration: 2600 });
+      return;
+    }
+    if (typeof window !== 'undefined') {
+      (window as any).print();
+    }
+  };
+
   const bodyCount = Object.values(generations).reduce((n, arr) => n + (arr ? arr.length : 0), 0);
 
   if (loading) {
@@ -215,6 +250,10 @@ export default function ExportPreview() {
           打印预览
         </Text>
         <View className="flex gap-2">
+          <Button size="sm" variant="outline" onClick={handlePrintPdf}>
+            <FileText size={14} color="#8B2500" />
+            <Text className="text-xs ml-1">导出PDF</Text>
+          </Button>
           <Button size="sm" variant="outline" onClick={handleShare}>
             <Share2 size={14} color="#8B2500" />
             <Text className="text-xs ml-1">分享</Text>
@@ -336,6 +375,11 @@ export default function ExportPreview() {
                           生卒（农历）：{(member.birth_date ? toLunarBirth(member.birth_date) : '') || '未知'}
                           {member.death_date ? ` - ${toLunarBirth(member.death_date)}` : member.is_alive === 'yes' ? ' - 健在' : ' - 已故'}
                         </Text>
+                        {member.burial_place && member.is_alive === 'no' && (
+                          <Text className="block text-sm" style={{ color: '#6B5B4F', fontFamily: 'STKaiti, KaiTi, serif' }}>
+                            葬地：{member.burial_place}
+                          </Text>
+                        )}
                         {(member.spouses && member.spouses.length > 0) ? (
                           member.spouses.map((sp, si) => (
                             <View key={sp.id || si}>
@@ -367,11 +411,6 @@ export default function ExportPreview() {
                         {member.birth_place && (
                           <Text className="block text-sm" style={{ color: '#6B5B4F', fontFamily: 'STKaiti, KaiTi, serif' }}>
                             出生地：{member.birth_place}
-                          </Text>
-                        )}
-                        {member.burial_place && member.is_alive === 'no' && (
-                          <Text className="block text-sm" style={{ color: '#6B5B4F', fontFamily: 'STKaiti, KaiTi, serif' }}>
-                            葬地：{member.burial_place}
                           </Text>
                         )}
                         {member.bio && (

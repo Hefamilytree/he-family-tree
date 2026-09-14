@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro, { useLoad, useDidShow } from '@tarojs/taro';
-import { User, Heart, MapPin, LogIn, LogOut, Shield, UserPlus } from 'lucide-react-taro';
+import { User, Heart, MapPin, LogIn, LogOut, Shield, UserPlus, Trash2 } from 'lucide-react-taro';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,6 +23,8 @@ const ProfilePage = () => {
   const [showLinkDialog, setShowLinkDialog] = useState(false);
   const [linking, setLinking] = useState(false);
   const [linkKeyword, setLinkKeyword] = useState('');
+  const [linkPhone, setLinkPhone] = useState('');
+  const [linkResidence, setLinkResidence] = useState('');
   const [memberOptions, setMemberOptions] = useState<any[]>([]);
   const [memberOptionsLoaded, setMemberOptionsLoaded] = useState(false);
 
@@ -78,6 +80,8 @@ const ProfilePage = () => {
       return;
     }
     setLinkKeyword('');
+    setLinkPhone(userInfo?.phone || '');
+    setLinkResidence(userInfo?.residence || '');
     setMemberOptions([]);
     setMemberOptionsLoaded(false);
     setShowLinkDialog(true);
@@ -113,12 +117,24 @@ const ProfilePage = () => {
       const res = await Network.request({
         url: '/api/auth/link-member',
         method: 'POST',
-        data: { userId: userInfo.id, memberId: member.id, name: member.name },
+        data: {
+          userId: userInfo.id,
+          memberId: member.id,
+          name: member.name,
+          phone: linkPhone.trim(),
+          residence: linkResidence.trim(),
+        },
         header: token ? { Authorization: `Bearer ${token}` } : {},
       });
       console.log('关联宗亲响应:', res.data);
       if (res.data?.code === 200) {
-        const updated = { ...userInfo, member_id: member.id, member_name: member.name };
+        const updated = {
+          ...userInfo,
+          member_id: member.id,
+          member_name: member.name,
+          phone: linkPhone.trim(),
+          residence: linkResidence.trim(),
+        };
         setUserInfo(updated);
         Taro.setStorageSync('userInfo', updated);
         setShowLinkDialog(false);
@@ -132,6 +148,38 @@ const ProfilePage = () => {
     } finally {
       setLinking(false);
     }
+  };
+
+  const handleClearData = () => {
+    if (!isLoggedIn || userInfo?.role !== 'admin') {
+      Taro.showToast({ title: '仅主管理员可操作', icon: 'none' });
+      return;
+    }
+    Taro.showModal({
+      title: '清除全部数据',
+      content: '将删除所有家族信息、成员、配偶、家规、活动及产业等全部数据，且不可恢复。确定继续吗？',
+      confirmColor: '#c53030',
+      success: async (modalRes) => {
+        if (!modalRes.confirm) return;
+        try {
+          const token = Taro.getStorageSync('token');
+          const apiRes = await Network.request({
+            url: '/api/auth/clear-data',
+            method: 'POST',
+            header: { Authorization: `Bearer ${token}` },
+          });
+          console.log('清除数据响应:', apiRes.data);
+          if (apiRes.data?.code === 200) {
+            Taro.showToast({ title: '已清除全部数据', icon: 'success' });
+          } else {
+            Taro.showToast({ title: apiRes.data?.msg || '清除失败', icon: 'none' });
+          }
+        } catch (error) {
+          console.error('清除数据失败:', error);
+          Taro.showToast({ title: '网络错误，清除失败', icon: 'none' });
+        }
+      },
+    });
   };
 
   const handleRootSeeking = () => {
@@ -260,6 +308,28 @@ const ProfilePage = () => {
 
       {/* 功能菜单 */}
       <View className="px-4 py-6 space-y-4">
+        {/* 管理员功能：清除全部数据 */}
+        {isLoggedIn && userInfo?.role === 'admin' && (
+          <Card
+            className="bg-red-100 border-red-300 active:opacity-80"
+            onClick={handleClearData}
+          >
+            <CardContent className="p-4 flex items-center gap-3">
+              <View className="w-10 h-10 rounded-full bg-red-700 flex items-center justify-center">
+                <Trash2 size={20} color="#FFFDF7" />
+              </View>
+              <View className="flex-1">
+                <Text className="block text-base font-semibold text-red-900">
+                  清除全部数据
+                </Text>
+                <Text className="block text-sm text-red-500">
+                  清除所有家族信息、成员、配偶及板块数据（仅主管理员）
+                </Text>
+              </View>
+            </CardContent>
+          </Card>
+        )}
+
         {/* 管理员功能 */}
         {isLoggedIn && (
           <Card
@@ -372,6 +442,27 @@ const ProfilePage = () => {
                 placeholder="输入姓名或关键字搜索"
                 value={linkKeyword}
                 onInput={(e) => handleSearchMembers(e.detail.value)}
+              />
+            </View>
+
+            <View>
+              <Label><Text className="block text-sm text-stone-600 mb-1">手机号码（用于宗亲验证）</Text></Label>
+              <Input
+                className="bg-stone-50"
+                type="number"
+                placeholder="请输入手机号码"
+                value={linkPhone}
+                onInput={(e) => setLinkPhone(e.detail.value)}
+              />
+            </View>
+
+            <View>
+              <Label><Text className="block text-sm text-stone-600 mb-1">现居住地</Text></Label>
+              <Input
+                className="bg-stone-50"
+                placeholder="如：广东省深圳市·南山"
+                value={linkResidence}
+                onInput={(e) => setLinkResidence(e.detail.value)}
               />
             </View>
 

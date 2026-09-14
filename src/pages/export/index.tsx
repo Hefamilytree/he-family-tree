@@ -4,6 +4,7 @@ import Taro, { useDidShow } from '@tarojs/taro';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Input } from '@/components/ui/input';
 import { Printer, TreePine, Users } from 'lucide-react-taro';
 import { Network } from '@/network';
 
@@ -35,6 +36,9 @@ export default function Export() {
   const [loading, setLoading] = useState(true);
   const [exportMode, setExportMode] = useState<'full' | 'branch'>('full');
   const [selectedBranch, setSelectedBranch] = useState<string>('');
+  const [includeAncestor, setIncludeAncestor] = useState(false);
+  const [startGen, setStartGen] = useState('');
+  const [endGen, setEndGen] = useState('');
 
   const loadData = async () => {
     setLoading(true);
@@ -56,8 +60,10 @@ export default function Export() {
 
   useDidShow(() => { loadData(); });
 
-  // 获取分支列表（第一代成员作为分支根）
-  const branches = members.filter(m => m.generation === 1);
+  // 分支列表：全部成员（世代升序，实现"由下往上选"，可任选一代/任意成员作为分支根）
+  const branches = [...members].sort(
+    (a, b) => (a.generation || 1) - (b.generation || 1) || (a.name || '').localeCompare(b.name || '', 'zh')
+  );
 
   // 获取指定分支的所有后代
   const getBranchMembers = (rootId: string): Member[] => {
@@ -91,7 +97,7 @@ export default function Export() {
 
   const handlePreview = () => {
     Taro.navigateTo({
-      url: `/pages/export-preview/index?mode=${exportMode}&branch=${selectedBranch}`
+      url: `/pages/export-preview/index?mode=${exportMode}&branch=${selectedBranch || ''}&toAncestor=${includeAncestor ? '1' : '0'}&startGen=${startGen}&endGen=${endGen}`
     });
   };
 
@@ -153,10 +159,32 @@ export default function Export() {
                     }}
                     onClick={() => setSelectedBranch(branch.id)}
                   >
-                    <Text className="text-sm">{branch.name}</Text>
+                    <Text className="text-sm">第{branch.generation}世 · {branch.name}</Text>
                   </View>
                 ))}
               </ScrollView>
+            </View>
+          )}
+
+          {/* 分支导出选项：向上到始祖 + 世数范围 */}
+          {exportMode === 'branch' && (
+            <View className="mb-4">
+              <View className="flex items-center justify-between mb-3">
+                <Text className="block text-sm" style={{ color: '#6B5B4F' }}>向上导出至始祖</Text>
+                <View
+                  className="px-3 py-2 rounded-full border-2"
+                  style={{ borderColor: includeAncestor ? '#8B2500' : '#E8E0D8', backgroundColor: includeAncestor ? '#8B2500' : '#FFFDF7' }}
+                  onClick={() => setIncludeAncestor(!includeAncestor)}
+                >
+                  <Text className="text-xs" style={{ color: includeAncestor ? '#FFFDF7' : '#6B5B4F' }}>{includeAncestor ? '已开启' : '关闭'}</Text>
+                </View>
+              </View>
+              <Text className="block text-sm mb-2" style={{ color: '#6B5B4F' }}>限制世数（留空为不加限制）</Text>
+              <View className="flex items-center gap-3">
+                <View className="flex-1"><Input type="number" placeholder="起始世(如1)" value={startGen} onInput={e => setStartGen(e.detail.value)} /></View>
+                <View className="flex-1"><Input type="number" placeholder="结束世(如5)" value={endGen} onInput={e => setEndGen(e.detail.value)} /></View>
+              </View>
+              <Text className="block text-xs mt-2" style={{ color: '#B0A090' }}>提示：在下方任选一位宗亲作为分支（由下往上选择导出）；勾选“向上导出至始祖”会包含该分支向上到始祖一脉。</Text>
             </View>
           )}
 
