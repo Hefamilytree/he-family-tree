@@ -96,6 +96,14 @@ export default function Index() {
       });
       return;
     }
+    if (itemKey === 'contact') {
+      Taro.navigateTo({ url: '/pages/contacts/index?mode=directory' });
+      return;
+    }
+    if (itemKey === 'relative') {
+      Taro.navigateTo({ url: '/pages/contacts/index?mode=nearby' });
+      return;
+    }
     Taro.navigateTo({
       url: `/pages/section-detail/index?section=${sectionId}&category=${itemKey}&title=${encodeURIComponent(itemName)}`
     });

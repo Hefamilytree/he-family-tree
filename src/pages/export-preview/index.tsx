@@ -1,453 +1,468 @@
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import Taro, { useRouter, useShareAppMessage } from '@tarojs/taro';
 import { View, Text } from '@tarojs/components';
-import Taro, { useRouter, useDidShow, useShareAppMessage } from '@tarojs/taro';
-import { Card, CardContent } from '@/components/ui/card';
+import { ChevronLeft, Share2, FileText, Check } from 'lucide-react-taro';
+import { Network } from '@/network';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toLunarBirth } from '@/utils/lunar';
-import { Share2, FileText } from 'lucide-react-taro';
-import { Network } from '@/network';
+import './index.css';
 
-interface FamilyInfo {
+interface Family {
   id: string;
-  surname: string;
   family_name: string;
-  hall_name: string | null;
-  motto: string | null;
-  description: string | null;
+  hall_name?: string;
+  motto?: string;
+  description?: string;
 }
 
-interface SpouseInfo {
-  id?: string;
+interface Spouse {
+  id: string;
   name: string;
+  birth_date?: string;
+  death_date?: string;
   status?: string;
-  birth_date?: string | null;
-  death_date?: string | null;
-  bio?: string | null;
-  burial_place?: string | null;
+  bio?: string;
+  burial_place?: string;
 }
 
 interface Member {
   id: string;
   name: string;
-  gender: string;
-  generation: number;
-  is_alive: string;
-  birth_date: string | null;
-  death_date: string | null;
-  parent_id: string | null;
-  spouse_name: string | null;
-  bio: string | null;
-  birth_place: string | null;
-  burial_place: string | null;
-  spouses?: SpouseInfo[];
+  username?: string;
+  gender: 'male' | 'female';
+  is_alive: 'yes' | 'no';
+  birth_date?: string;
+  death_date?: string;
+  generation?: number;
+  generation_title?: string;
+  father_id?: string;
+  mother_id?: string;
+  spouse_name?: string;
+  birth_place?: string;
+  bio?: string;
+  burial_place?: string;
+  spouses?: Spouse[];
 }
 
-interface CulturalItem {
-  id: string;
+interface Section {
   category: string;
   title: string;
-  content: string | null;
-  sort_order?: number;
+  content: string;
+  event_date?: string;
+  location?: string;
 }
 
-// 族谱卷首文化内容顺序：前言、家史、家风家训、家族字辈、家族事记
-const FRONT_CULTURAL_ORDER = [
-  { key: 'person_history', label: '前言' },
-  { key: 'merit', label: '家史' },
-  { key: 'family_motto', label: '家风家训' },
-  { key: 'honor', label: '家族字辈' },
-  { key: 'family_history', label: '家族事记' },
-];
+const isMiniApp = ['WEAPP', 'TT'].includes(Taro.getEnv() as any);
 
-// 族谱卷末文化内容顺序：后记、编写说明
-const BACK_CULTURAL_ORDER = [
-  { key: 'afterword', label: '后记' },
-  { key: 'editorial_note', label: '编写说明' },
-];
-
-const KAI_FONT = 'STKaiti, KaiTi, serif';
-
-export default function ExportPreview() {
+const ExportPreviewPage: React.FC = () => {
   const router = useRouter();
-  const mode = router.params.mode || 'full';
+  const exportMode = router.params.mode || 'full';
   const branchId = router.params.branch || '';
-  const includeAncestor = router.params.toAncestor || '1';
-  const startGen = router.params.startGen || '';
-  const endGen = router.params.endGen || '';
+  const includeAncestor = router.params.toAncestor === '1';
+  const startGenRaw = router.params.startGen || '';
+  const endGenRaw = router.params.endGen || '';
+  const parsedStart = Number(startGenRaw);
+  const parsedEnd = Number(endGenRaw);
+  const startGen = startGenRaw !== '' && !Number.isNaN(parsedStart) ? parsedStart : undefined;
+  const endGen = endGenRaw !== '' && !Number.isNaN(parsedEnd) ? parsedEnd : undefined;
 
-  const [family, setFamily] = useState<FamilyInfo | null>(null);
+  const [family, setFamily] = useState<Family | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
-  const [culturalItems, setCulturalItems] = useState<CulturalItem[]>([]);
-  const isMiniApp = [Taro.ENV_TYPE.WEAPP, Taro.ENV_TYPE.TT].includes(Taro.getEnv() as any);
+  const [sections, setSections] = useState<Section[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
-  // 微信右上角分享 / 好友分享
   useShareAppMessage(() => ({
     title: `${family?.family_name || '何氏'}族谱`,
-    path: `/pages/index/index`,
+    path: `/pages/export-preview/index?mode=${exportMode}&branch=${branchId}&toAncestor=${includeAncestor ? 1 : 0}&startGen=${startGenRaw}&endGen=${endGenRaw}`,
   }));
 
-  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    Taro.setNavigationBarTitle({ title: '族谱打印预览' });
+    loadData();
+  }, []);
+
+  const buildQuery = () => {
+    const q: string[] = [`mode=${exportMode}`];
+    if (branchId) q.push(`branch=${branchId}`);
+    if (includeAncestor) q.push('toAncestor=1');
+    if (startGen !== undefined) q.push(`startGen=${startGen}`);
+    if (endGen !== undefined) q.push(`endGen=${endGen}`);
+    return q.join('&');
+  };
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [familyRes, membersRes, culturalRes] = await Promise.all([
-        Network.request({ url: '/api/family' }),
+      const [famRes, memRes, secRes] = await Promise.all([
+        Network.request({ url: '/api/families' }),
         Network.request({ url: '/api/members' }),
-        Network.request({ url: '/api/cultural' }),
+        Network.request({ url: '/api/cultural-heritage' }),
       ]);
-      const familyPayload = familyRes.data?.data;
-      setFamily(Array.isArray(familyPayload) ? (familyPayload.length > 0 ? familyPayload[0] : null) : (familyPayload || null));
+      console.log('[export-preview] families:', famRes.data);
+      console.log('[export-preview] members:', memRes.data);
+      const famList = famRes.data?.data || [];
+      const allMembers: Member[] = memRes.data?.data || [];
+      const allSections: Section[] = secRes.data?.data || [];
 
-      let memberList = membersRes.data?.data || [];
-      // 分支模式：由下往上，支持含祖先链 + 世数范围
-      if (mode === 'branch' && branchId) {
-        const allMembers = memberList;
-        const root = allMembers.find(m => m.id === branchId);
-        const picked: Member[] = [];
-        if (root) {
-          // 该分支的后代（由所选分支点向下）
-          const queue = [root.id];
-          while (queue.length > 0) {
-            const currentId = queue.shift()!;
-            const member = allMembers.find(m => m.id === currentId);
-            if (member) {
-              picked.push(member);
-              allMembers.filter(m => m.parent_id === currentId).forEach(child => queue.push(child.id));
-            }
+      const fam = famList[0] || null;
+      setFamily(fam);
+
+      let filtered = [...allMembers];
+      if (exportMode === 'branch' && branchId) {
+        if (includeAncestor) {
+          const ancestorIds = new Set<string>();
+          let cur = allMembers.find((m) => m.id === branchId);
+          let guard = 0;
+          while (cur && cur.father_id && guard < 50) {
+            ancestorIds.add(cur.father_id);
+            cur = allMembers.find((m) => m.id === cur!.father_id);
+            guard += 1;
           }
-          // 若需“到始祖”，向上补祖先链
-          if (includeAncestor === '1') {
-            let p = root;
-            let guard = 0;
-            while (p && p.parent_id && guard++ < 300) {
-              const pa = allMembers.find(m => m.id === p.parent_id);
-              if (!pa) break;
-              picked.push(pa);
-              p = pa;
-            }
+          const down = new Set<string>([branchId]);
+          let changed = true;
+          while (changed) {
+            changed = false;
+            allMembers.forEach((m) => {
+              if ((m.father_id && down.has(m.father_id)) || (m.mother_id && down.has(m.mother_id))) {
+                if (!down.has(m.id)) { down.add(m.id); changed = true; }
+              }
+            });
           }
-          // 世数范围过滤
-          const startG = parseInt(startGen || '', 10);
-          const endG = parseInt(endGen || '', 10);
-          let result = picked;
-          if (Number.isNaN(startG) === false) result = result.filter(m => (m.generation || 1) >= startG);
-          if (Number.isNaN(endG) === false) result = result.filter(m => (m.generation || 0) <= endG);
-          memberList = Array.from(new Map(result.map(m => [m.id, m])).values());
+          filtered = allMembers.filter((m) => ancestorIds.has(m.id) || down.has(m.id));
         } else {
-          memberList = [];
+          const root = allMembers.find((m) => m.id === branchId);
+          const rootGen = root?.generation;
+          const reachable = new Set<string>([branchId]);
+          let changed = true;
+          while (changed) {
+            changed = false;
+            allMembers.forEach((m) => {
+              if ((m.father_id && reachable.has(m.father_id)) || (m.mother_id && reachable.has(m.mother_id))) {
+                if (!reachable.has(m.id)) { reachable.add(m.id); changed = true; }
+              }
+            });
+          }
+          filtered = allMembers.filter((m) => reachable.has(m.id));
+          if (rootGen !== undefined && startGen !== undefined) {
+            filtered = filtered.filter((m) => (m.generation ?? rootGen) >= rootGen + (startGen - 1));
+          }
         }
+        if (endGen !== undefined) {
+          const base = allMembers.find((m) => m.id === branchId)?.generation ?? 1;
+          filtered = filtered.filter((m) => (m.generation ?? base) <= base + (endGen - 1));
+        }
+      } else if (startGen !== undefined || endGen !== undefined) {
+        filtered = filtered.filter((m) => {
+          if (m.generation === undefined || m.generation === null) return true;
+          if (startGen !== undefined && m.generation < startGen) return false;
+          if (endGen !== undefined && m.generation > endGen) return false;
+          return true;
+        });
       }
-      setMembers(memberList);
 
-      const culturalList: CulturalItem[] = culturalRes.data?.data || [];
-      console.log('文化传承数据:', culturalList);
-      setCulturalItems(culturalList);
+      filtered.sort((a, b) => (a.generation ?? 0) - (b.generation ?? 0));
+      setMembers(filtered);
+      setSections(allSections);
     } catch (e) {
-      console.error('加载数据失败:', e);
+      console.error('加载导出数据失败', e);
+      Taro.showToast({ title: '加载失败，请重试', icon: 'none' });
     } finally {
       setLoading(false);
     }
   };
 
-  useDidShow(() => { loadData(); });
-
-  // 按指定顺序分组文化内容
-  const groupCultural = (order: { key: string; label: string }[]) => {
-    return order
-      .map(section => ({
-        ...section,
-        items: culturalItems
-          .filter(item => item.category === section.key)
-          .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0)),
-      }))
-      .filter(section => section.items.length > 0);
-  };
-
-  const frontSections = groupCultural(FRONT_CULTURAL_ORDER);
-  const backSections = groupCultural(BACK_CULTURAL_ORDER);
-
-  // 渲染文化板块（楷体毛笔字）
-  const renderCulturalSections = (sections: { key: string; label: string; items: CulturalItem[] }[]) => {
-    return sections.map(section => (
-      <View key={section.key} className="mb-6">
-        <View className="flex items-center mb-3">
-          <View className="px-4 py-1 rounded" style={{ backgroundColor: '#8B2500' }}>
-            <Text className="text-base font-bold" style={{ color: '#FFFDF7', fontFamily: KAI_FONT }}>
-              {section.label}
-            </Text>
-          </View>
-          <View className="flex-1 h-px ml-3" style={{ backgroundColor: '#8B2500' }} />
-        </View>
-        <View className="space-y-3">
-          {section.items.map(item => (
-            <View key={item.id} className="p-4 rounded-lg" style={{ backgroundColor: '#FFFDF7', border: '1px solid #E8E0D8' }}>
-              <Text className="block text-lg font-bold mb-2" style={{ color: '#333', fontFamily: KAI_FONT }}>
-                {item.title}
-              </Text>
-              {item.content && (
-                <Text className="block text-sm leading-relaxed" style={{ color: '#6B5B4F', fontFamily: KAI_FONT, whiteSpace: 'pre-wrap' }}>
-                  {item.content}
-                </Text>
-              )}
-            </View>
-          ))}
-        </View>
-      </View>
-    ));
-  };
-
   // 按世代分组
   const generations: Record<number, Member[]> = {};
-  members.forEach(m => {
-    if (!generations[m.generation]) generations[m.generation] = [];
-    generations[m.generation].push(m);
+  members.forEach((m) => {
+    const gen = m.generation || 1;
+    if (!generations[gen]) generations[gen] = [];
+    generations[gen].push(m);
   });
   const sortedGens = Object.keys(generations).map(Number).sort((a, b) => a - b);
 
-  const handleShare = () => {
-    const url = typeof window !== 'undefined' ? window.location.href : '';
-    if (isMiniApp) {
-      Taro.showToast({ title: '点击右上角「···」即可转发给微信好友', icon: 'none' });
-      return;
-    }
-    const nav = (navigator as any);
-    if (nav && typeof nav.share === 'function') {
-      nav.share({ title: `${family?.family_name || '何氏'}族谱`, text: '誠邀您查阅族谱世系', url })
-        .catch(() => Taro.showToast({ title: '分享未完成', icon: 'none' }));
-    } else {
-      Taro.showToast({ title: '请截图保存后分享', icon: 'none' });
+  const frontSections = sections.filter((s) =>
+    ['person_history', 'merit', 'family_motto', 'honor'].includes(s.category)
+  );
+  const backSections = sections.filter((s) =>
+    ['family_history', 'afterword', 'editorial_note'].includes(s.category)
+  );
+  const eventSections = sections.filter((s) => s.category === 'family_history');
+
+  const yearText = new Date().getFullYear();
+  const bodyCount = members.length;
+
+  // 生成竖排列
+  const vText = (label: string, value: string) => (
+    <Text className="v-col">
+      <Text className="v-col-label">{label}</Text>
+      {value}
+    </Text>
+  );
+
+  // ===== 导出 PDF：调用后端生成，手机端可打开/转发 =====
+  const handleExportPdf = async () => {
+    setExporting(true);
+    Taro.showLoading({ title: '正在生成PDF...', mask: true });
+    try {
+      const query = buildQuery();
+      if (isMiniApp) {
+        // 小程序：后端生成 PDF → 下载临时文件 → 打开（可转发给微信好友/保存）
+        const fileRes: any = await Network.downloadFile({
+          url: `/api/pdf/genealogy?${query}`,
+        });
+        console.log('[export-preview] downloadFile:', fileRes.statusCode, fileRes.tempFilePath);
+        if (fileRes.statusCode === 200 && fileRes.tempFilePath) {
+          Taro.hideLoading();
+          await Taro.openDocument({
+            filePath: fileRes.tempFilePath,
+            fileType: 'pdf',
+            showMenu: true,
+            fail: () => {
+              Taro.showToast({ title: '已生成，可从右上角转发', icon: 'none' });
+            },
+          });
+        } else {
+          Taro.hideLoading();
+          Taro.showToast({ title: 'PDF生成失败，请重试', icon: 'none' });
+        }
+      } else {
+        // H5：直接打开 PDF，手机浏览器可保存/系统分享
+        Taro.hideLoading();
+        window.open(`/api/pdf/genealogy?${query}`, '_blank');
+      }
+    } catch (e) {
+      console.error('导出PDF失败', e);
+      Taro.hideLoading();
+      Taro.showToast({ title: '导出失败，请重试', icon: 'none' });
+    } finally {
+      setExporting(false);
     }
   };
 
-  const handlePrintPdf = () => {
-    if (isMiniApp) {
-      Taro.showToast({ title: '小程序可点击右上角「···」转发；生成PDF请用电脑端H5打开打印预览', icon: 'none', duration: 2600 });
-      return;
-    }
-    if (typeof window !== 'undefined') {
-      (window as any).print();
+  // ===== 分享链接 =====
+  const handleCopyLink = async () => {
+    const query = buildQuery();
+    const url = `${window.location.origin}${window.location.pathname}#/pages/export-preview/index?${query}`;
+    try {
+      if (isMiniApp) {
+        Taro.showShareMenu({ withShareTicket: true });
+        Taro.showToast({ title: '请点右上角转发给微信好友', icon: 'none', duration: 2000 });
+        return;
+      }
+      if (navigator.share) {
+        await navigator.share({
+          title: `${family?.family_name || '何氏'}族谱`,
+          text: '点击查看何氏族谱（古籍版）',
+          url,
+        });
+      } else {
+        await navigator.clipboard.writeText(url);
+        setLinkCopied(true);
+        setTimeout(() => setLinkCopied(false), 2000);
+        Taro.showToast({ title: '链接已复制', icon: 'success' });
+      }
+    } catch {
+      /* 用户取消分享 */
     }
   };
 
-  const bodyCount = Object.values(generations).reduce((n, arr) => n + (arr ? arr.length : 0), 0);
+  const Sheet: React.FC<{ children: React.ReactNode; sidebar?: string }> = ({ children, sidebar }) => (
+    <View className="scroll-sheet mb-6 print-page">
+      <View className="scroll-sheet-inner">
+        {sidebar ? (
+          <View className="scroll-sidebar">
+            <Text className="scroll-sidebar-text">{sidebar}</Text>
+          </View>
+        ) : null}
+        {children}
+      </View>
+    </View>
+  );
 
   if (loading) {
     return (
-      <View className="min-h-full bg-[#FAF8F5] p-4">
-        <Skeleton className="h-32 w-full mb-4" />
-        <Skeleton className="h-20 w-full" />
+      <View className="min-h-full bg-stone-100 p-4">
+        <Skeleton className="h-96 w-full" />
       </View>
     );
   }
 
+  if (!family) {
+    return (
+      <View className="min-h-full bg-stone-100 p-4 flex items-center justify-center">
+        <Text className="block text-stone-500">暂无家族信息</Text>
+      </View>
+    );
+  }
+
+  const sidebarText = family.hall_name
+    ? `${family.family_name}${family.hall_name}`
+    : `${family.family_name}族谱`;
+
   return (
-    <View className="min-h-full bg-[#FAF8F5] pb-20">
-      {/* 操作栏 */}
-      <View className="px-4 pt-4 pb-3 flex items-center justify-between">
-        <Text className="text-lg font-bold" style={{ color: '#8B2500' }}>
+    <View className="min-h-full bg-stone-200 no-print-host">
+      {/* 顶部操作栏 */}
+      <View className="no-print sticky top-0 z-20 px-4 py-3 bg-stone-100 bg-opacity-95 flex items-center gap-2 border-b border-stone-300">
+        <Button variant="outline" size="sm" className="shrink-0" onClick={() => Taro.navigateBack()}>
+          <View className="flex items-center">
+            <ChevronLeft size={16} color="#8B2500" />
+            <Text className="text-xs ml-1">返回</Text>
+          </View>
+        </Button>
+        <Text className="block flex-1 text-lg font-bold" style={{ color: '#8B2500', fontFamily: 'STKaiti, KaiTi, serif' }}>
           打印预览
         </Text>
-        <View className="flex gap-2">
-          <Button size="sm" variant="outline" onClick={handlePrintPdf}>
-            <FileText size={14} color="#8B2500" />
-            <Text className="text-xs ml-1">导出PDF</Text>
-          </Button>
-          <Button size="sm" variant="outline" onClick={handleShare}>
-            <Share2 size={14} color="#8B2500" />
-            <Text className="text-xs ml-1">分享</Text>
-          </Button>
-        </View>
-      </View>
-
-      {/* 封面页 */}
-      <View className="px-4 mb-4">
-        <View
-          style={{
-            backgroundColor: '#FBF6EE',
-            border: '3px double #8B2500',
-            padding: '40px 16px', minHeight: '560px',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          }}
+        <Button
+          size="sm"
+          className="shrink-0 bg-red-800 text-white"
+          disabled={exporting}
+          onClick={handleExportPdf}
         >
-          <Text className="block text-center" style={{ color: '#8B2500', fontFamily: 'STKaiti, KaiTi, serif', fontSize: '26px', letterSpacing: '10px', marginBottom: '20px' }}>
-            {family?.hall_name || ''}
-          </Text>
-          <View style={{ width: '64px', borderBottom: '2px solid #8B2500', marginBottom: '22px' }} />
-          <Text className="block text-center font-bold" style={{ color: '#8B2500', fontFamily: 'STKaiti, KaiTi, serif', fontSize: '46px', letterSpacing: '14px' }}>
-            {family?.family_name || '何氏'}族谱
-          </Text>
-          <View style={{ width: '64px', borderBottom: '2px solid #8B2500', marginTop: '26px', marginBottom: '24px' }} />
-          <Text className="block text-center" style={{ color: '#6B5B4F', fontFamily: 'STKaiti, KaiTi, serif', fontSize: '17px', letterSpacing: '4px' }}>
-            {`公元${new Date().getFullYear()}年重修`}
-          </Text>
-        </View>
-      </View>
-
-      {/* 索引表（目录）页 */}
-      <View className="px-4 mb-4">
-        <View style={{ backgroundColor: '#FFFDF7', border: '2px solid #8B2500', padding: '22px' }}>
-          <Text className="block text-center text-xl font-bold mb-5" style={{ color: '#8B2500', fontFamily: 'STKaiti, KaiTi, serif' }}>
-            目 录
-          </Text>
-          <Text className="block text-sm font-bold mb-2" style={{ color: '#8B2500', fontFamily: 'STKaiti, KaiTi, serif' }}>卷首</Text>
-          {frontSections.map((s, i) => (
-            <View key={`f${i}`} className="flex" style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 3 }}>
-              <Text style={{ fontFamily: 'STKaiti, KaiTi, serif', fontSize: '14px' }}>{s.label}</Text>
-            </View>
-          ))}
-          {frontSections.length === 0 && (
-            <Text style={{ fontFamily: 'STKaiti, KaiTi, serif', fontSize: '13px', color: '#999' }}>（暂无前置内容）</Text>
-          )}
-          <Text className="block text-sm font-bold mt-4 mb-2" style={{ color: '#8B2500', fontFamily: 'STKaiti, KaiTi, serif' }}>世系</Text>
-          <View className="flex" style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 3 }}>
-            <Text style={{ fontFamily: 'STKaiti, KaiTi, serif', fontSize: '14px' }}>第 1-{sortedGens.length || 1} 世（录入 {bodyCount} 位在世系）</Text>
+          <View className="flex items-center">
+            <FileText size={15} color="#FFFDF7" />
+            <Text className="text-xs ml-1">{exporting ? '生成中' : '导出PDF'}</Text>
           </View>
-          <Text className="block text-sm font-bold mt-4 mb-2" style={{ color: '#8B2500', fontFamily: 'STKaiti, KaiTi, serif' }}>卷末</Text>
-          {backSections.map((s, i) => (
-            <View key={`b${i}`} className="flex" style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 3 }}>
-              <Text style={{ fontFamily: 'STKaiti, KaiTi, serif', fontSize: '14px' }}>{s.label}</Text>
-            </View>
-          ))}
-          {backSections.length === 0 && (
-            <Text style={{ fontFamily: 'STKaiti, KaiTi, serif', fontSize: '13px', color: '#999' }}>（暂无卷末内容）</Text>
-          )}
-        </View>
+        </Button>
+        <Button size="sm" variant="outline" className="shrink-0" onClick={handleCopyLink}>
+          <View className="flex items-center">
+            {linkCopied ? <Check size={15} color="#2E7D32" /> : <Share2 size={15} color="#8B2500" />}
+            <Text className="text-xs ml-1">{linkCopied ? '已复制' : '分享'}</Text>
+          </View>
+        </Button>
       </View>
 
-      {/* 族谱内容 - 楷体毛笔字风格 */}
-      <View className="px-4">
-        {family && (
-          <View className="export-content" style={{ backgroundColor: '#FFFDF7', border: '2px solid #8B2500', padding: '20px' }}>
-            {/* 标题 */}
-            <View className="text-center mb-6">
-              <Text className="block text-3xl font-bold mb-2" style={{ color: '#8B2500', fontFamily: 'STKaiti, KaiTi, serif' }}>
-                {family.family_name}族谱
-              </Text>
-              {family.hall_name && (
-                <Text className="block text-lg" style={{ color: '#6B5B4F', fontFamily: 'STKaiti, KaiTi, serif' }}>
+      <View className="px-3 py-4 max-w-xl mx-auto">
+        {/* ===== 封面 ===== */}
+        <Sheet>
+          <View className="cover-border flex items-center justify-center" style={{ minHeight: '900rpx' }}>
+            <View className="items-center">
+              {family.hall_name ? (
+                <Text className="block text-base tracking-widest mb-8" style={{ color: '#5a4a3a', fontFamily: 'STKaiti, KaiTi, serif' }}>
                   {family.hall_name}
                 </Text>
-              )}
-              {family.motto && (
-                <View className="mt-4 p-3 rounded" style={{ backgroundColor: '#FFF5F0', border: '1px solid #8B2500' }}>
-                  <Text className="block text-sm mb-1" style={{ color: '#8B2500', fontFamily: 'STKaiti, KaiTi, serif' }}>家训</Text>
-                  <Text className="block text-base font-bold" style={{ color: '#8B2500', fontFamily: 'STKaiti, KaiTi, serif' }}>
-                    {family.motto}
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            {/* 卷首文化内容：前言、家史、家风家训、家族字辈、家族事记 */}
-            {renderCulturalSections(frontSections)}
-
-            {/* 世代内容 */}
-            {sortedGens.map(gen => (
-              <View key={gen} className="mb-6">
-                <View className="flex items-center mb-3">
-                  <View className="px-4 py-1 rounded" style={{ backgroundColor: '#8B2500' }}>
-                    <Text className="text-base font-bold" style={{ color: '#FFFDF7', fontFamily: 'STKaiti, KaiTi, serif' }}>
-                      第{gen}世
-                    </Text>
-                  </View>
-                  <View className="flex-1 h-px ml-3" style={{ backgroundColor: '#8B2500' }} />
-                </View>
-
-                <View className="space-y-3">
-                  {generations[gen].map(member => (
-                    <View key={member.id} className="p-4 rounded-lg" style={{ backgroundColor: '#FFFDF7', border: '1px solid #E8E0D8' }}>
-                      <View className="flex items-start justify-between mb-2">
-                        <Text className="text-xl font-bold" style={{ color: '#333', fontFamily: 'STKaiti, KaiTi, serif' }}>
-                          {member.name}
-                          {member.is_alive === 'no' && (
-                            <Text className="text-sm ml-2" style={{ color: '#999' }}>(故)</Text>
-                          )}
-                        </Text>
-                        <Text className="text-sm px-3 py-1 rounded" style={{ backgroundColor: '#FFF5F0', color: '#8B2500', fontFamily: 'STKaiti, KaiTi, serif' }}>
-                          {member.gender === 'male' ? '男' : '女'}
-                        </Text>
-                      </View>
-
-                      <View className="space-y-1">
-                        <Text className="block text-sm" style={{ color: '#6B5B4F', fontFamily: 'STKaiti, KaiTi, serif' }}>
-                          生卒（农历）：{(member.birth_date ? toLunarBirth(member.birth_date) : '') || '未知'}
-                          {member.death_date ? ` - ${toLunarBirth(member.death_date)}` : member.is_alive === 'yes' ? ' - 健在' : ' - 已故'}
-                        </Text>
-                        {member.burial_place && member.is_alive === 'no' && (
-                          <Text className="block text-sm" style={{ color: '#6B5B4F', fontFamily: 'STKaiti, KaiTi, serif' }}>
-                            葬地：{member.burial_place}
-                          </Text>
-                        )}
-                        {(member.spouses && member.spouses.length > 0) ? (
-                          member.spouses.map((sp, si) => (
-                            <View key={sp.id || si}>
-                              <Text className="block text-sm" style={{ color: '#6B5B4F', fontFamily: 'STKaiti, KaiTi, serif' }}>
-                                配偶：{sp.name}{sp.status === 'deceased' ? '（故）' : sp.status === 'divorced' ? '（离异）' : ''}
-                              </Text>
-                              {(sp.birth_date || (sp.status === 'deceased' && sp.death_date)) && (
-                                <Text className="block text-sm" style={{ color: '#999', fontFamily: 'STKaiti, KaiTi, serif' }}>
-                                  　生卒（农历）：{(sp.birth_date ? toLunarBirth(sp.birth_date) : '') || '生失考'}{sp.status === 'deceased' ? ` - ${(sp.death_date ? toLunarBirth(sp.death_date) : '') || '卒失考'}` : ''}
-                                </Text>
-                              )}
-                              {sp.status === 'deceased' && sp.burial_place && (
-                                <Text className="block text-sm" style={{ color: '#999', fontFamily: 'STKaiti, KaiTi, serif' }}>
-                                  　葬地：{sp.burial_place}
-                                </Text>
-                              )}
-                              {sp.bio && (
-                                <Text className="block text-sm" style={{ color: '#999', fontFamily: 'STKaiti, KaiTi, serif' }}>
-                                  　简介：{sp.bio}
-                                </Text>
-                              )}
-                            </View>
-                          ))
-                        ) : member.spouse_name ? (
-                          <Text className="block text-sm" style={{ color: '#6B5B4F', fontFamily: 'STKaiti, KaiTi, serif' }}>
-                            配偶：{member.spouse_name}
-                          </Text>
-                        ) : null}
-                        {member.birth_place && (
-                          <Text className="block text-sm" style={{ color: '#6B5B4F', fontFamily: 'STKaiti, KaiTi, serif' }}>
-                            出生地：{member.birth_place}
-                          </Text>
-                        )}
-                        {member.bio && (
-                          <Text className="block text-sm mt-2" style={{ color: '#666', fontFamily: 'STKaiti, KaiTi, serif' }}>
-                            简介：{member.bio}
-                          </Text>
-                        )}
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            ))}
-
-            {/* 卷末文化内容：后记、编写说明 */}
-            {renderCulturalSections(backSections)}
-
-            {/* 页脚 */}
-            <View className="text-center mt-8 pt-4" style={{ borderTop: '1px solid #E8E0D8' }}>
-              <Text className="block text-xs" style={{ color: '#999', fontFamily: 'STKaiti, KaiTi, serif' }}>
-                {family.family_name}族谱 · 共 {members.length} 位宗亲
+              ) : null}
+              <Text className="v-title text-center" style={{ fontSize: '88rpx', height: '520rpx' }}>
+                {family.family_name}族谱
+              </Text>
+              <Text className="cover-seal block text-sm mt-10 px-4 py-2">
+                {yearText}年重修
               </Text>
             </View>
           </View>
-        )}
-      </View>
+        </Sheet>
 
-      {/* 提示 */}
-      <View className="px-4 mt-4">
-        <Card>
-          <CardContent className="p-4">
-            <Text className="block text-sm" style={{ color: '#6B5B4F' }}>
-              💡 提示：请使用手机截图功能保存族谱内容，或分享给家人朋友。
-            </Text>
-          </CardContent>
-        </Card>
+        {/* ===== 目录 ===== */}
+        <Sheet sidebar={sidebarText}>
+          <Text className="v-title block mb-4" style={{ fontSize: '40rpx' }}>目录</Text>
+          <View className="v-columns">
+            <Text className="v-col" style={{ color: '#8b2500' }}>卷首</Text>
+            <Text className="v-col">一、家族源流</Text>
+            <Text className="v-col">二、家训家风</Text>
+            <Text className="v-col">三、字辈谱</Text>
+            <Text className="v-col">四、家族事记</Text>
+            <Text className="v-col" style={{ color: '#8b2500' }}>世系</Text>
+            <Text className="v-col">{`第 ${sortedGens[0] || 1} — ${sortedGens[sortedGens.length - 1] || 1} 世`}</Text>
+            <Text className="v-col">{`录入 ${bodyCount} 位`}</Text>
+            <Text className="v-col" style={{ color: '#8b2500' }}>卷末</Text>
+            <Text className="v-col">五、后记</Text>
+            <Text className="v-col">六、编写说明</Text>
+          </View>
+        </Sheet>
+
+        {/* ===== 卷首：源流 / 家训 ===== */}
+        <Sheet sidebar={sidebarText}>
+          <Text className="v-title block mb-4" style={{ fontSize: '38rpx' }}>卷首</Text>
+          <View className="v-columns">
+            {vText('家族源流', family.description || '（待补录）')}
+            {family.motto ? vText('家训', family.motto) : null}
+            {frontSections.filter((s) => s.category === 'family_motto' || s.category === 'merit').map((s) => (
+              vText(s.title, s.content)
+            ))}
+          </View>
+        </Sheet>
+
+        {/* ===== 字辈谱 ===== */}
+        <Sheet sidebar={sidebarText}>
+          <Text className="v-title block mb-4" style={{ fontSize: '38rpx' }}>字辈谱</Text>
+          <View className="v-columns">
+            {(() => {
+              const titleSet = Array.from(new Set(members.map((m) => m.generation_title).filter(Boolean))) as string[];
+              if (titleSet.length === 0) {
+                return <Text className="v-col" style={{ color: '#999' }}>（各世字辈待录入）</Text>;
+              }
+              return titleSet.map((t) => (
+                <Text key={t} className="v-col" style={{ color: '#8b2500', fontWeight: '700', fontSize: '30rpx' }}>{t}</Text>
+              ));
+            })()}
+          </View>
+        </Sheet>
+
+        {/* ===== 家族事记 ===== */}
+        <Sheet sidebar={sidebarText}>
+          <Text className="v-title block mb-4" style={{ fontSize: '38rpx' }}>家族事记</Text>
+          <View className="v-columns">
+            {eventSections.length === 0 ? (
+              <Text className="v-col" style={{ color: '#999' }}>（暂无事记）</Text>
+            ) : (
+              eventSections.slice(0, 12).map((s) => vText(s.event_date || '事记', `${s.title}${s.content ? ' ' + s.content : ''}`))
+            )}
+          </View>
+        </Sheet>
+
+        {/* ===== 世系正文（按世分页） ===== */}
+        {sortedGens.map((gen) => (
+          <Sheet key={gen} sidebar={sidebarText}>
+            <Text className="v-title block mb-4" style={{ fontSize: '40rpx' }}>{`第${gen}世`}</Text>
+            <View className="v-columns">
+              {generations[gen].map((m) => {
+                const birth = m.birth_date ? toLunarBirth(m.birth_date) : '生失考';
+                const death = m.is_alive === 'yes'
+                  ? '健在'
+                  : m.death_date ? toLunarBirth(m.death_date) : '卒失考';
+                const title = m.generation_title || '';
+                return (
+                  <View key={m.id} className="v-entry">
+                    <Text className="v-col" style={{ fontWeight: '700', color: '#2b1d14' }}>
+                      {title ? `${title} · ` : ''}{m.name}{m.gender === 'female' ? '（女）' : ''}
+                    </Text>
+                    {vText('生卒', `${birth} 至 ${death}`)}
+                    {m.is_alive === 'no' && m.burial_place ? vText('葬地', m.burial_place) : null}
+                    {(m.spouses && m.spouses.length > 0) ? m.spouses.map((sp, si) => (
+                      <Text key={sp.id || si} className="v-col">
+                        <Text className="v-col-label">配</Text>
+                        {sp.name}{sp.status === 'deceased' ? '（故）' : sp.status === 'divorced' ? '（离异）' : ''}
+                        {sp.birth_date ? ` ${toLunarBirth(sp.birth_date)}` : ''}
+                        {sp.status === 'deceased' && sp.death_date ? ` 至 ${toLunarBirth(sp.death_date)}` : ''}
+                        {sp.status === 'deceased' && sp.burial_place ? ` 葬${sp.burial_place}` : ''}
+                      </Text>
+                    )) : m.spouse_name ? vText('配', m.spouse_name) : null}
+                    {m.birth_place ? vText('出生地', m.birth_place) : null}
+                    {m.bio ? vText('简介', m.bio) : null}
+                  </View>
+                );
+              })}
+            </View>
+          </Sheet>
+        ))}
+
+        {/* ===== 卷末 ===== */}
+        <Sheet sidebar={sidebarText}>
+          <Text className="v-title block mb-4" style={{ fontSize: '38rpx' }}>卷末</Text>
+          <View className="v-columns">
+            {backSections.length === 0 ? (
+              <Text className="v-col" style={{ color: '#999' }}>（暂无卷末内容）</Text>
+            ) : (
+              backSections.map((s) => vText(s.title, s.content))
+            )}
+            {vText('记事', `${family.family_name}族谱 共录 ${bodyCount} 位宗亲 ${yearText}年重修`)}
+          </View>
+        </Sheet>
       </View>
     </View>
   );
-}
+};
+
+export default ExportPreviewPage;

@@ -1,0 +1,107 @@
+/* 古籍书页样式（仿传统族谱线装本） */
+.scroll-sheet {
+  width: 100%;
+  background-color: #f3ead8;
+  border: 2rpx solid #8b2500;
+  border-radius: 8rpx;
+  position: relative;
+  box-sizing: border-box;
+}
+
+.scroll-sheet-inner {
+  position: relative;
+  padding: 56rpx 56rpx 56rpx 40rpx;
+}
+
+/* 右侧堂号竖栏 */
+.scroll-sidebar {
+  position: absolute;
+  right: 14rpx;
+  top: 40rpx;
+  bottom: 40rpx;
+  width: 44rpx;
+  background-color: #8b2500;
+  border-radius: 6rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scroll-sidebar-text {
+  writing-mode: vertical-rl;
+  letter-spacing: 8rpx;
+  color: #f3ead8;
+  font-size: 22rpx;
+  font-family: STKaiti, KaiTi, serif;
+}
+
+/* 竖排标题（大字） */
+.v-title {
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  letter-spacing: 16rpx;
+  font-family: STKaiti, KaiTi, serif;
+  font-weight: 700;
+  color: #2b1d14;
+  line-height: 1.15;
+}
+
+/* 竖排正文容器 */
+.v-columns {
+  display: flex;
+  flex-direction: row-reverse;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  align-content: flex-start;
+  row-gap: 16rpx;
+  column-gap: 12rpx;
+}
+
+.v-col {
+  writing-mode: vertical-rl;
+  font-family: STKaiti, KaiTi, serif;
+  color: #3b2c20;
+  letter-spacing: 2rpx;
+  line-height: 1.9;
+  max-height: 920rpx;
+}
+
+.v-col-label {
+  color: #8b2500;
+  font-weight: 700;
+  margin-left: 6rpx;
+}
+
+/* 封面 */
+.cover-border {
+  border: 4rpx double #8b2500;
+  outline: 2rpx solid #8b2500;
+  outline-offset: 10rpx;
+}
+
+.cover-seal {
+  display: inline-block;
+  border: 3rpx solid #8b2500;
+  color: #8b2500;
+  font-family: STKaiti, KaiTi, serif;
+  border-radius: 6rpx;
+}
+
+/* 世系条目竖排 */
+.v-entry {
+  margin-bottom: 20rpx;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  .print-page {
+    page-break-after: always;
+    box-shadow: none !important;
+    margin-bottom: 0 !important;
+  }
+  body {
+    background: #fff;
+  }
+}

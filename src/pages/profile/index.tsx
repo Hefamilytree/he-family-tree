@@ -25,6 +25,9 @@ const ProfilePage = () => {
   const [linkKeyword, setLinkKeyword] = useState('');
   const [linkPhone, setLinkPhone] = useState('');
   const [linkResidence, setLinkResidence] = useState('');
+  const [selectedMember, setSelectedMember] = useState<any>(null);
+  const [linkGenerationTitle, setLinkGenerationTitle] = useState('');
+  const [allMembers, setAllMembers] = useState<any[]>([]);
   const [memberOptions, setMemberOptions] = useState<any[]>([]);
   const [memberOptionsLoaded, setMemberOptionsLoaded] = useState(false);
 
@@ -82,6 +85,9 @@ const ProfilePage = () => {
     setLinkKeyword('');
     setLinkPhone(userInfo?.phone || '');
     setLinkResidence(userInfo?.residence || '');
+    setSelectedMember(null);
+    setLinkGenerationTitle('');
+    setAllMembers([]);
     setMemberOptions([]);
     setMemberOptionsLoaded(false);
     setShowLinkDialog(true);
@@ -92,13 +98,17 @@ const ProfilePage = () => {
     setMemberOptionsLoaded(true);
     try {
       const token = Taro.getStorageSync('token');
-      const res = await Network.request({
-        url: '/api/members',
-        method: 'GET',
-        header: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      console.log('关联宗亲-成员列表:', res.data);
-      const list = (res.data?.data || res.data?.data?.list || []) as any[];
+      let list = allMembers;
+      if (!list || list.length === 0) {
+        const res = await Network.request({
+          url: '/api/members',
+          method: 'GET',
+          header: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        console.log('关联宗亲-成员列表:', res.data);
+        list = (res.data?.data || []) as any[];
+        setAllMembers(list);
+      }
       const kw = keyword.trim();
       setMemberOptions(
         kw ? list.filter((m: any) => (m.name || '').includes(kw)) : list
@@ -109,8 +119,26 @@ const ProfilePage = () => {
     }
   };
 
-  const handleLinkMember = async (member: any) => {
-    if (!userInfo?.id || !member?.id) return;
+  const handleLinkMember = async () => {
+    if (!userInfo?.id || !selectedMember?.id) return;
+    if (!linkGenerationTitle.trim()) {
+      Taro.showToast({ title: '请选择字辈', icon: 'none' });
+      return;
+    }
+    const phone = linkPhone.trim();
+    if (!phone) {
+      Taro.showToast({ title: '请填写手机号码', icon: 'none' });
+      return;
+    }
+    if (!/^1\d{10}$/.test(phone)) {
+      Taro.showToast({ title: '手机号码格式不正确', icon: 'none' });
+      return;
+    }
+    const residence = linkResidence.trim();
+    if (!residence) {
+      Taro.showToast({ title: '请填写现居住地', icon: 'none' });
+      return;
+    }
     setLinking(true);
     try {
       const token = Taro.getStorageSync('token');
@@ -119,10 +147,11 @@ const ProfilePage = () => {
         method: 'POST',
         data: {
           userId: userInfo.id,
-          memberId: member.id,
-          name: member.name,
-          phone: linkPhone.trim(),
-          residence: linkResidence.trim(),
+          memberId: selectedMember.id,
+          name: selectedMember.name,
+          phone,
+          residence,
+          generationTitle: linkGenerationTitle.trim(),
         },
         header: token ? { Authorization: `Bearer ${token}` } : {},
       });
@@ -130,15 +159,16 @@ const ProfilePage = () => {
       if (res.data?.code === 200) {
         const updated = {
           ...userInfo,
-          member_id: member.id,
-          member_name: member.name,
-          phone: linkPhone.trim(),
-          residence: linkResidence.trim(),
+          member_id: selectedMember.id,
+          member_name: selectedMember.name,
+          phone,
+          residence,
+          generation_title: res.data?.data?.generation_title || linkGenerationTitle.trim(),
         };
         setUserInfo(updated);
         Taro.setStorageSync('userInfo', updated);
         setShowLinkDialog(false);
-        Taro.showToast({ title: '关联成功', icon: 'success' });
+        Taro.showToast({ title: '认证成功', icon: 'success' });
       } else {
         Taro.showToast({ title: res.data?.msg || '关联失败', icon: 'none' });
       }
@@ -433,78 +463,121 @@ const ProfilePage = () => {
 
           <View className="space-y-3 mt-2">
             <Text className="block text-sm text-stone-500">
-              请填写您的姓名，或输入关键字筛选宗亲树中的成员，将自己关联到对应的族谱世系中。
+              {selectedMember
+                ? '已选择您在宗亲树中的身份，请补全字辈、手机号码和现居住地，完成宗亲认证后将自动加入通讯录与附近宗亲。'
+                : '第一步：搜索姓名关键字，在宗亲树中选择您本人。'}
             </Text>
-            <View>
-              <Label><Text className="block text-sm text-stone-600 mb-1">您的姓名 / 关键字</Text></Label>
-              <Input
-                className="bg-stone-50"
-                placeholder="输入姓名或关键字搜索"
-                value={linkKeyword}
-                onInput={(e) => handleSearchMembers(e.detail.value)}
-              />
-            </View>
 
-            <View>
-              <Label><Text className="block text-sm text-stone-600 mb-1">手机号码（用于宗亲验证）</Text></Label>
-              <Input
-                className="bg-stone-50"
-                type="number"
-                placeholder="请输入手机号码"
-                value={linkPhone}
-                onInput={(e) => setLinkPhone(e.detail.value)}
-              />
-            </View>
-
-            <View>
-              <Label><Text className="block text-sm text-stone-600 mb-1">现居住地</Text></Label>
-              <Input
-                className="bg-stone-50"
-                placeholder="如：广东省深圳市·南山"
-                value={linkResidence}
-                onInput={(e) => setLinkResidence(e.detail.value)}
-              />
-            </View>
-
-            <View className="max-h-80 overflow-y-auto space-y-2">
-              {memberOptionsLoaded && memberOptions.length === 0 ? (
-                <Text className="block text-sm text-stone-400 text-center py-4">
-                  未找到匹配的宗亲，请检查姓名或联系管理员录入。
-                </Text>
-              ) : (
-                memberOptions.map((m: any) => (
-                  <View
-                    key={m.id}
-                    className="flex items-center justify-between px-3 py-2 rounded-lg border border-stone-200 bg-white"
-                    onClick={() => handleLinkMember(m)}
-                  >
-                    <View>
-                      <Text className="block text-sm font-semibold text-stone-800">
-                        {m.name || m.username || '未署名'}
-                      </Text>
-                      <Text className="block text-xs text-stone-500 mt-1">
-                        {m.generation_title || (m.generation ? `第${m.generation}世` : '')}
-                        {m.birth_date || m.death_date ? ` · ${m.birth_date || ''}${m.birth_date && m.death_date ? '-' : ''}${m.death_date || ''}` : ''}
-                      </Text>
-                    </View>
-                    <Button
-                      size="sm"
-                      className="bg-amber-700 text-white"
-                      disabled={linking}
-                      onClick={() => handleLinkMember(m)}
-                    >
-                      <Text>关联</Text>
-                    </Button>
+            {!selectedMember ? (
+              <>
+                <View>
+                  <Label><Text className="block text-sm text-stone-600 mb-1">您的姓名 / 关键字</Text></Label>
+                  <Input
+                    className="bg-stone-50"
+                    placeholder="输入姓名或关键字搜索"
+                    value={linkKeyword}
+                    onInput={(e) => handleSearchMembers(e.detail.value)}
+                  />
+                </View>
+                <View className="max-h-80 overflow-y-auto space-y-2">
+                  {memberOptionsLoaded && memberOptions.length === 0 ? (
+                    <Text className="block text-sm text-stone-400 text-center py-4">
+                      未找到匹配的宗亲，请检查姓名或联系管理员录入。
+                    </Text>
+                  ) : (
+                    memberOptions.map((m: any) => (
+                      <View
+                        key={m.id}
+                        className="flex items-center justify-between px-3 py-2 rounded-lg border border-stone-200 bg-white"
+                      >
+                        <View>
+                          <Text className="block text-sm font-semibold text-stone-800">
+                            {m.name || m.username || '未署名'}
+                          </Text>
+                          <Text className="block text-xs text-stone-500 mt-1">
+                            {m.generation_title || (m.generation ? `第${m.generation}世` : '')}
+                            {m.birth_date || m.death_date ? ` · ${m.birth_date || ''}${m.birth_date && m.death_date ? '-' : ''}${m.death_date || ''}` : ''}
+                          </Text>
+                        </View>
+                        <Button
+                          size="sm"
+                          className="bg-amber-700 text-white"
+                          onClick={() => { setSelectedMember(m); if (m.generation_title) setLinkGenerationTitle(m.generation_title); }}
+                        >
+                          <Text>选择</Text>
+                        </Button>
+                      </View>
+                    ))
+                  )}
+                </View>
+              </>
+            ) : (
+              <>
+                <View className="px-3 py-2 rounded-lg border border-amber-300 bg-amber-50 flex items-center justify-between">
+                  <View>
+                    <Text className="block text-sm font-semibold text-stone-800">
+                      {selectedMember.name || selectedMember.username || '未署名'}
+                    </Text>
+                    <Text className="block text-xs text-stone-500 mt-1">
+                      {selectedMember.generation_title || (selectedMember.generation ? `第${selectedMember.generation}世` : '')}
+                    </Text>
                   </View>
-                ))
-              )}
-            </View>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => { setSelectedMember(null); setLinkGenerationTitle(''); }}
+                  >
+                    <Text>重选</Text>
+                  </Button>
+                </View>
+
+                <View>
+                  <Label><Text className="block text-sm text-stone-600 mb-1">字辈（必填）</Text></Label>
+                  <Input
+                    className="bg-stone-50"
+                    placeholder="请输入您的字辈，如：景"
+                    value={linkGenerationTitle}
+                    onInput={(e) => setLinkGenerationTitle(e.detail.value)}
+                  />
+                </View>
+
+                <View>
+                  <Label><Text className="block text-sm text-stone-600 mb-1">手机号码（必填）</Text></Label>
+                  <Input
+                    className="bg-stone-50"
+                    type="number"
+                    placeholder="请输入手机号码"
+                    value={linkPhone}
+                    onInput={(e) => setLinkPhone(e.detail.value)}
+                  />
+                </View>
+
+                <View>
+                  <Label><Text className="block text-sm text-stone-600 mb-1">现居住地（必填）</Text></Label>
+                  <Input
+                    className="bg-stone-50"
+                    placeholder="如：广东省深圳市·南山区"
+                    value={linkResidence}
+                    onInput={(e) => setLinkResidence(e.detail.value)}
+                  />
+                </View>
+              </>
+            )}
           </View>
 
           <DialogFooter className="mt-4">
             <Button variant="outline" onClick={() => setShowLinkDialog(false)}>
               <Text>关闭</Text>
             </Button>
+            {selectedMember && (
+              <Button
+                className="bg-red-800 text-white"
+                disabled={linking}
+                onClick={() => handleLinkMember()}
+              >
+                <Text>{linking ? '提交中...' : '完成宗亲认证'}</Text>
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

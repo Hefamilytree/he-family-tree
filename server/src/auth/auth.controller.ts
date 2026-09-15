@@ -85,7 +85,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async linkMember(
     @Headers('authorization') authorization: string,
-    @Body() body: { memberId: string; phone?: string; residence?: string }
+    @Body() body: { memberId: string; phone?: string; residence?: string; generationTitle?: string }
   ) {
     if (!authorization) {
       return { code: 401, msg: '未登录', data: null };
@@ -95,11 +95,11 @@ export class AuthController {
     if (!decoded) {
       return { code: 401, msg: 'token 无效或已过期', data: null };
     }
-    const { memberId, phone, residence } = body;
+    const { memberId, phone, residence, generationTitle } = body;
     if (!memberId) {
       return { code: 400, msg: '请选择要关联的宗亲', data: null };
     }
-    return this.authService.linkMember(decoded.userId, memberId, phone, residence);
+    return this.authService.linkMember(decoded.userId, memberId, phone, residence, generationTitle);
   }
 
   @Post('clear-data')

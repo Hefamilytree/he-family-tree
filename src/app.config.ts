@@ -6,6 +6,7 @@ export default defineAppConfig({
     'pages/profile/index',
     'pages/section-detail/index',
     'pages/section-edit/index',
+    'pages/contacts/index',
     'pages/export/index',
     'pages/export-preview/index',
     'pages/login/index',

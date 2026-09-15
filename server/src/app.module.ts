@@ -11,10 +11,12 @@ import { CommentsModule } from '@/comments/comments.module';
 import { RegistrationsModule } from '@/registrations/registrations.module';
 import { SpousesModule } from '@/spouses/spouses.module';
 import { UploadModule } from '@/upload/upload.module';
+import { PdfModule } from './pdf/pdf.module';
+import { ContactsModule } from './contacts/contacts.module';
 
 @Module({
   imports: [AuthModule, FamilyModule, MembersModule, CulturalModule, HarmonyModule, EconomicModule,
-    UploadModule, CommentsModule, RegistrationsModule, SpousesModule],
+    UploadModule, CommentsModule, RegistrationsModule, SpousesModule, PdfModule, ContactsModule],
   controllers: [AppController],
   providers: [AppService],
 })

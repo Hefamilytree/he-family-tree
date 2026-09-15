@@ -251,13 +251,44 @@ export class AuthService {
     };
   }
 
-  async linkMember(userId: string, memberId: string, phone?: string, residence?: string) {
+  async linkMember(
+    userId: string,
+    memberId: string,
+    phone?: string,
+    residence?: string,
+    generationTitle?: string,
+  ) {
     if (!userId || !memberId) {
       return { code: 400, msg: '参数不完整', data: null };
     }
+    if (!phone || !phone.trim()) {
+      return { code: 400, msg: '请填写手机号码', data: null };
+    }
+    if (!residence || !residence.trim()) {
+      return { code: 400, msg: '请填写现居住地', data: null };
+    }
+
+    // 校验所选成员存在，并确定字辈（成员已有字辈则沿用；否则必须传入并回写）
+    const { data: member, error: memErr } = await this.supabase
+      .from('members')
+      .select('id, generation_title')
+      .eq('id', memberId)
+      .single();
+    if (memErr || !member) {
+      return { code: 404, msg: '所选宗亲不存在', data: null };
+    }
+    const finalTitle = (member.generation_title || '').trim() || (generationTitle || '').trim();
+    if (!finalTitle) {
+      return { code: 400, msg: '请选择字辈', data: null };
+    }
+    if (!(member.generation_title || '').trim() && finalTitle) {
+      // 成员原本无字辈，将本次选择回写到成员
+      await this.supabase.from('members').update({ generation_title: finalTitle }).eq('id', memberId);
+    }
+
     const { data, error } = await this.supabase
       .from('users')
-      .update({ member_id: memberId, phone: phone || null, residence: residence || null })
+      .update({ member_id: memberId, phone: phone.trim(), residence: residence.trim() })
       .eq('id', userId)
       .select()
       .single();
@@ -274,6 +305,7 @@ export class AuthService {
         member_id: data.member_id,
         phone: data.phone,
         residence: data.residence,
+        generation_title: finalTitle,
       },
     };
   }
