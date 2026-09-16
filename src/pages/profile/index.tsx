@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro, { useLoad, useDidShow } from '@tarojs/taro';
-import { User, Heart, MapPin, LogIn, LogOut, Shield, UserPlus, Trash2 } from 'lucide-react-taro';
+import { User, Heart, MapPin, LogIn, LogOut, Shield, UserPlus, Trash2, House } from 'lucide-react-taro';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
@@ -30,6 +31,18 @@ const ProfilePage = () => {
   const [allMembers, setAllMembers] = useState<any[]>([]);
   const [memberOptions, setMemberOptions] = useState<any[]>([]);
   const [memberOptionsLoaded, setMemberOptionsLoaded] = useState(false);
+
+  // 创建家族
+  const [showFamilyDialog, setShowFamilyDialog] = useState(false);
+  const [creatingFamily, setCreatingFamily] = useState(false);
+  const [familyForm, setFamilyForm] = useState({
+    surname: '',
+    family_name: '',
+    hall_name: '',
+    motto: '',
+    origin: '',
+    description: '',
+  });
 
   useLoad(() => {
     console.log('ProfilePage loaded');
@@ -283,6 +296,55 @@ const ProfilePage = () => {
     });
   };
 
+  const handleOpenCreateFamily = () => {
+    if (!isLoggedIn) {
+      Taro.showToast({ title: '请先登录', icon: 'none' });
+      return;
+    }
+    setFamilyForm({ surname: '', family_name: '', hall_name: '', motto: '', origin: '', description: '' });
+    setShowFamilyDialog(true);
+  };
+
+  const handleCreateFamily = async () => {
+    if (!familyForm.surname.trim()) {
+      Taro.showToast({ title: '请填写姓氏', icon: 'none' });
+      return;
+    }
+    if (!familyForm.family_name.trim()) {
+      Taro.showToast({ title: '请填写家族名称', icon: 'none' });
+      return;
+    }
+    setCreatingFamily(true);
+    try {
+      const token = Taro.getStorageSync('token');
+      const res = await Network.request({
+        url: '/api/family',
+        method: 'POST',
+        data: {
+          surname: familyForm.surname.trim(),
+          family_name: familyForm.family_name.trim(),
+          hall_name: familyForm.hall_name.trim() || null,
+          motto: familyForm.motto.trim() || null,
+          origin: familyForm.origin.trim() || null,
+          description: familyForm.description.trim() || null,
+        },
+        header: { Authorization: `Bearer ${token}` },
+      });
+      console.log('创建家族响应:', res.data);
+      if (res.data.code === 200) {
+        Taro.showToast({ title: '家族创建成功', icon: 'success' });
+        setShowFamilyDialog(false);
+      } else {
+        Taro.showToast({ title: res.data.msg || '创建失败', icon: 'none' });
+      }
+    } catch (err) {
+      console.error('创建家族失败:', err);
+      Taro.showToast({ title: '网络错误', icon: 'none' });
+    } finally {
+      setCreatingFamily(false);
+    }
+  };
+
   return (
     <View className="min-h-screen bg-amber-50">
       {/* 用户信息区域 */}
@@ -338,6 +400,28 @@ const ProfilePage = () => {
 
       {/* 功能菜单 */}
       <View className="px-4 py-6 space-y-4">
+        {/* 创建家族 */}
+        {isLoggedIn && (
+          <Card
+            className="bg-amber-100 border-amber-300 active:opacity-80"
+            onClick={handleOpenCreateFamily}
+          >
+            <CardContent className="p-4 flex items-center gap-3">
+              <View className="w-10 h-10 rounded-full bg-amber-700 flex items-center justify-center">
+                <House size={20} color="#FFFDF7" />
+              </View>
+              <View className="flex-1">
+                <Text className="block text-base font-semibold text-stone-800">
+                  创建家族
+                </Text>
+                <Text className="block text-sm text-stone-500">
+                  建立姓氏堂号与家族档案，开始修缮族谱
+                </Text>
+              </View>
+            </CardContent>
+          </Card>
+        )}
+
         {/* 管理员功能：清除全部数据 */}
         {isLoggedIn && userInfo?.role === 'admin' && (
           <Card
@@ -578,6 +662,87 @@ const ProfilePage = () => {
                 <Text>{linking ? '提交中...' : '完成宗亲认证'}</Text>
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 创建家族弹窗 */}
+      <Dialog open={showFamilyDialog} onOpenChange={setShowFamilyDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              <Text className="block text-lg font-bold text-stone-800">创建家族</Text>
+            </DialogTitle>
+          </DialogHeader>
+
+          <View className="space-y-3 mt-2 max-h-96 overflow-y-auto">
+            <View>
+              <Label><Text className="block text-sm text-stone-600 mb-1">姓氏（必填）</Text></Label>
+              <Input
+                className="bg-stone-50"
+                placeholder="如：何"
+                value={familyForm.surname}
+                onInput={(e) => setFamilyForm({ ...familyForm, surname: e.detail.value })}
+              />
+            </View>
+            <View>
+              <Label><Text className="block text-sm text-stone-600 mb-1">家族名称（必填）</Text></Label>
+              <Input
+                className="bg-stone-50"
+                placeholder="如：庐江何氏家族"
+                value={familyForm.family_name}
+                onInput={(e) => setFamilyForm({ ...familyForm, family_name: e.detail.value })}
+              />
+            </View>
+            <View>
+              <Label><Text className="block text-sm text-stone-600 mb-1">堂号</Text></Label>
+              <Input
+                className="bg-stone-50"
+                placeholder="如：庐江堂"
+                value={familyForm.hall_name}
+                onInput={(e) => setFamilyForm({ ...familyForm, hall_name: e.detail.value })}
+              />
+            </View>
+            <View>
+              <Label><Text className="block text-sm text-stone-600 mb-1">祖训 / 族训</Text></Label>
+              <Textarea
+                className="bg-stone-50"
+                placeholder="如：忠孝传家，耕读继世"
+                value={familyForm.motto}
+                onInput={(e) => setFamilyForm({ ...familyForm, motto: e.detail.value })}
+              />
+            </View>
+            <View>
+              <Label><Text className="block text-sm text-stone-600 mb-1">家族起源</Text></Label>
+              <Textarea
+                className="bg-stone-50"
+                placeholder="简述家族起源与迁徙"
+                value={familyForm.origin}
+                onInput={(e) => setFamilyForm({ ...familyForm, origin: e.detail.value })}
+              />
+            </View>
+            <View>
+              <Label><Text className="block text-sm text-stone-600 mb-1">家族简介</Text></Label>
+              <Textarea
+                className="bg-stone-50"
+                placeholder="家族概况说明"
+                value={familyForm.description}
+                onInput={(e) => setFamilyForm({ ...familyForm, description: e.detail.value })}
+              />
+            </View>
+          </View>
+
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setShowFamilyDialog(false)}>
+              <Text>取消</Text>
+            </Button>
+            <Button
+              className="bg-red-800 text-white"
+              disabled={creatingFamily}
+              onClick={handleCreateFamily}
+            >
+              <Text>{creatingFamily ? '创建中...' : '创建'}</Text>
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
