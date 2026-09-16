@@ -209,21 +209,32 @@ const ExportPreviewPage: React.FC = () => {
     try {
       const query = buildQuery();
       if (isMiniApp) {
-        // 小程序：后端生成 PDF → 下载临时文件 → 打开（可转发给微信好友/保存）
-        const fileRes: any = await Network.downloadFile({
+        // 小程序：后端生成 PDF → 下载到可打开路径 → openDocument 打开（可查看/转发/打印）
+        const pdfName = `he-family-${Date.now()}.pdf`;
+        // 指定 .pdf 后缀的本地路径，确保 openDocument 能正确识别打开
+        const savePath: string = `${Taro.env.USER_DATA_PATH}/${pdfName}`;
+        const fileRes: any = await (Network.downloadFile as any)({
           url: `/api/pdf/genealogy?${query}`,
+          filePath: savePath,
         });
-        console.log('[export-preview] downloadFile:', fileRes.statusCode, fileRes.tempFilePath);
-        if (fileRes.statusCode === 200 && fileRes.tempFilePath) {
+        console.log('[export-preview] downloadFile:', fileRes.statusCode, fileRes.tempFilePath || savePath);
+        const openedPath = fileRes.tempFilePath || savePath;
+        if (fileRes.statusCode === 200 && openedPath) {
           Taro.hideLoading();
-          await Taro.openDocument({
-            filePath: fileRes.tempFilePath,
-            fileType: 'pdf',
-            showMenu: true,
-            fail: () => {
-              Taro.showToast({ title: '已生成，可从右上角转发', icon: 'none' });
-            },
-          });
+          try {
+            await Taro.openDocument({
+              filePath: openedPath,
+              fileType: 'pdf',
+              showMenu: true,
+            });
+            Taro.showToast({
+              title: '已打开，可在文件内转发/打印',
+              icon: 'none',
+              duration: 2500,
+            });
+          } catch {
+            Taro.showToast({ title: '无法打开PDF，请从右上角转发', icon: 'none' });
+          }
         } else {
           Taro.hideLoading();
           Taro.showToast({ title: 'PDF生成失败，请重试', icon: 'none' });
@@ -323,7 +334,7 @@ const ExportPreviewPage: React.FC = () => {
         >
           <View className="flex items-center">
             <FileText size={15} color="#FFFDF7" />
-            <Text className="text-xs ml-1">{exporting ? '生成中' : '导出PDF'}</Text>
+            <Text className="text-xs ml-1">{exporting ? '生成中' : '打印'}</Text>
           </View>
         </Button>
         <Button size="sm" variant="outline" className="shrink-0" onClick={handleCopyLink}>
