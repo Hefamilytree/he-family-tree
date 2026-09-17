@@ -138,6 +138,24 @@ export const users = pgTable(
   ]
 );
 
+// 通讯录/附近宗亲 手动维护联系人表（自动认证条目来自 users 关联 members）
+export const kinContacts = pgTable(
+  "kin_contacts",
+  {
+    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+    name: varchar("name", { length: 64 }).notNull(),
+    phone: varchar("phone", { length: 32 }),
+    residence: varchar("residence", { length: 255 }),
+    generation: integer("generation"),
+    generation_title: varchar("generation_title", { length: 32 }),
+    bio: text("bio"),
+    source: varchar("source", { length: 16 }).notNull().default("manual"),
+    created_by: varchar("created_by", { length: 36 }),
+    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  }
+);
+
 // 评论表
 export const comments = pgTable(
   "comments",

@@ -97,17 +97,22 @@ const ExportPreviewPage: React.FC = () => {
     setLoading(true);
     try {
       const [famRes, memRes, secRes] = await Promise.all([
-        Network.request({ url: '/api/families' }),
+        Network.request({ url: '/api/family' }),
         Network.request({ url: '/api/members' }),
-        Network.request({ url: '/api/cultural-heritage' }),
+        Network.request({ url: '/api/cultural' }),
       ]);
-      console.log('[export-preview] families:', famRes.data);
+      console.log('[export-preview] family:', famRes.data);
       console.log('[export-preview] members:', memRes.data);
-      const famList = famRes.data?.data || [];
+      // /api/family 返回单个家族对象（可能为 null）
+      const famPayload = famRes.data?.data;
+      const fam: Family | null = famPayload
+        ? Array.isArray(famPayload)
+          ? (famPayload[0] || null)
+          : famPayload
+        : null;
       const allMembers: Member[] = memRes.data?.data || [];
       const allSections: Section[] = secRes.data?.data || [];
 
-      const fam = famList[0] || null;
       setFamily(fam);
 
       let filtered = [...allMembers];
