@@ -22,6 +22,19 @@ const ECONOMIC_FIELD_CONFIG: Record<string, { titleLabel: string; contentLabel: 
   product: { titleLabel: '产品名称', contentLabel: '产品详情', showContent: true, showNote: false, showImage: true },
 };
 
+// 文化传承分类标签（板块只保留内容，标题以分类标签占位）
+const CULTURAL_LABEL: Record<string, string> = {
+  family_style: '家风',
+  family_instruction: '家训',
+  honor: '家族字辈',
+  merit: '家族源流',
+  migration: '迁徙轨迹',
+  family_history: '家族事记',
+  person_history: '前言',
+  afterword: '后记',
+  editorial_note: '编写说明',
+};
+
 export default function SectionEdit() {
   const router = useRouter();
   const section = router.params.section || '';
@@ -101,8 +114,14 @@ export default function SectionEdit() {
   };
 
   const handleSave = async () => {
-    if (!formTitle.trim()) {
+    const isCultural = section === 'cultural';
+    const showOnlyContent = isCultural;
+    if (!showOnlyContent && !formTitle.trim()) {
       Taro.showToast({ title: '请输入标题', icon: 'none' });
+      return;
+    }
+    if (showOnlyContent && !content.trim()) {
+      Taro.showToast({ title: '请输入内容', icon: 'none' });
       return;
     }
     setSaving(true);
@@ -118,7 +137,7 @@ export default function SectionEdit() {
       const data: any = {
         family_id: familyId,
         category,
-        title: formTitle,
+        title: showOnlyContent ? (CULTURAL_LABEL[category] || title || category) : formTitle,
         content: content || null,
         sort_order: 1,
       };
@@ -160,7 +179,8 @@ export default function SectionEdit() {
             {editId ? '编辑' : '添加'} - {title}
           </Text>
 
-          {/* 标题（经济板块按分类动态命名） */}
+          {/* 标题（经济板块按分类动态命名；文化传承只保留内容、不设标题） */}
+          {section !== 'cultural' && (
           <View className="mb-4">
             <Text className="block text-sm mb-2" style={{ color: '#6B5B4F' }}>{showTitleLabel}</Text>
             <View className="bg-[#FFFDF7] rounded-lg p-3 border" style={{ borderColor: '#E8E0D8' }}>
@@ -172,6 +192,7 @@ export default function SectionEdit() {
               />
             </View>
           </View>
+          )}
 
           {/* 活动相关字段（活动日期/地点 优先于内容，在和谐板块） */}
           {section === 'harmony' && (

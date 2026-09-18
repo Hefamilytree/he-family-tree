@@ -1,20 +1,33 @@
 import { useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro, { useLoad, useDidShow } from '@tarojs/taro';
-import { User, Heart, MapPin, LogIn, LogOut, Shield, UserPlus, Trash2, House } from 'lucide-react-taro';
+import { User, Heart, MapPin, LogIn, LogOut, Shield, UserPlus, Trash2, House, HandHeart, Check, X, Send } from 'lucide-react-taro';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Network } from '@/network';
+
+const statusText = (status?: string) => {
+  switch (status) {
+    case 'approved':
+      return '已通过';
+    case 'rejected':
+      return '已驳回';
+    default:
+      return '待审核';
+  }
+};
 
 const ProfilePage = () => {
   const [userInfo, setUserInfo] = useState<any>(null);
@@ -43,6 +56,24 @@ const ProfilePage = () => {
     origin: '',
     description: '',
   });
+
+  // 申请加入家族
+  const [showApplyDialog, setShowApplyDialog] = useState(false);
+  const [submittingApply, setSubmittingApply] = useState(false);
+  const [applyForm, setApplyForm] = useState({
+    name: '',
+    generation: '',
+    generation_title: '',
+    phone: '',
+    residence: '',
+    message: '',
+  });
+  const [myApps, setMyApps] = useState<any[]>([]);
+
+  // 管理员：入册审核
+  const [showAdminInbox, setShowAdminInbox] = useState(false);
+  const [adminApps, setAdminApps] = useState<any[]>([]);
+  const [reviewingId, setReviewingId] = useState('');
 
   useLoad(() => {
     console.log('ProfilePage loaded');
@@ -345,6 +376,115 @@ const ProfilePage = () => {
     }
   };
 
+  const handleOpenApply = () => {
+    if (!isLoggedIn) {
+      Taro.showToast({ title: '请先登录', icon: 'none' });
+      return;
+    }
+    setApplyForm({
+      name: userInfo?.nickname || userInfo?.username || '',
+      generation: '',
+      generation_title: '',
+      phone: userInfo?.phone || '',
+      residence: userInfo?.residence || '',
+      message: '',
+    });
+    loadMyApps();
+    setShowApplyDialog(true);
+  };
+
+  const loadMyApps = async () => {
+    try {
+      const token = Taro.getStorageSync('token');
+      const res = await Network.request({
+        url: '/api/family-apply/mine',
+        method: 'GET',
+        header: { Authorization: `Bearer ${token}` },
+      });
+      setMyApps(res.data?.data || []);
+    } catch (e) {
+      console.error('加载申请失败:', e);
+    }
+  };
+
+  const handleSubmitApply = async () => {
+    if (!applyForm.name.trim()) {
+      Taro.showToast({ title: '请填写姓名', icon: 'none' });
+      return;
+    }
+    if (!/^1\d{10}$/.test(applyForm.phone.trim())) {
+      Taro.showToast({ title: '请填写正确的手机号码', icon: 'none' });
+      return;
+    }
+    setSubmittingApply(true);
+    try {
+      const token = Taro.getStorageSync('token');
+      const res = await Network.request({
+        url: '/api/family-apply',
+        method: 'POST',
+        data: {
+          name: applyForm.name.trim(),
+          generation: applyForm.generation.trim() || null,
+          generation_title: applyForm.generation_title.trim() || null,
+          phone: applyForm.phone.trim(),
+          residence: applyForm.residence.trim() || null,
+          message: applyForm.message.trim() || null,
+        },
+        header: { Authorization: `Bearer ${token}` },
+      });
+      console.log('提交申请响应:', res.data);
+      Taro.showToast({ title: res.data.msg || '申请已提交', icon: res.data.code === 200 ? 'success' : 'none' });
+      if (res.data.code === 200) {
+        await loadMyApps();
+      }
+    } catch (e) {
+      console.error('提交申请失败:', e);
+      Taro.showToast({ title: '网络错误', icon: 'none' });
+    } finally {
+      setSubmittingApply(false);
+    }
+  };
+
+  const loadAdminInbox = async () => {
+    try {
+      const token = Taro.getStorageSync('token');
+      const res = await Network.request({
+        url: '/api/family-apply/admin',
+        method: 'GET',
+        header: { Authorization: `Bearer ${token}` },
+      });
+      if (res.data?.code === 200) {
+        setAdminApps(res.data.data || []);
+        setShowAdminInbox(true);
+      } else {
+        Taro.showToast({ title: res.data?.msg || '无权查看', icon: 'none' });
+      }
+    } catch (e) {
+      console.error('加载审核列表失败:', e);
+      Taro.showToast({ title: '网络错误', icon: 'none' });
+    }
+  };
+
+  const handleReview = async (id: string, action: 'approve' | 'reject') => {
+    setReviewingId(id);
+    try {
+      const token = Taro.getStorageSync('token');
+      const res = await Network.request({
+        url: `/api/family-apply/${id}/${action}`,
+        method: 'PUT',
+        header: { Authorization: `Bearer ${token}` },
+      });
+      console.log('审核响应:', res.data);
+      Taro.showToast({ title: res.data.msg || '操作完成', icon: res.data.code === 200 ? 'success' : 'none' });
+      if (res.data.code === 200) await loadAdminInbox();
+    } catch (e) {
+      console.error('审核失败:', e);
+      Taro.showToast({ title: '网络错误', icon: 'none' });
+    } finally {
+      setReviewingId('');
+    }
+  };
+
   return (
     <View className="min-h-screen bg-amber-50">
       {/* 用户信息区域 */}
@@ -505,6 +645,46 @@ const ProfilePage = () => {
             </View>
           </CardContent>
         </Card>
+
+        <Card
+          className="bg-amber-50 border-stone-200 active:opacity-80"
+          onClick={handleOpenApply}
+        >
+          <CardContent className="p-4 flex items-center gap-3">
+            <View className="w-10 h-10 rounded-full bg-teal-700 flex items-center justify-center">
+              <HandHeart size={20} color="#FFFDF7" />
+            </View>
+            <View className="flex-1">
+              <Text className="block text-base font-semibold text-stone-800">
+                申请加入家族
+              </Text>
+              <Text className="block text-sm text-stone-500">
+                填写信息提交申请，联系管理员审核授权归宗
+              </Text>
+            </View>
+          </CardContent>
+        </Card>
+
+        {userInfo?.role === 'admin' && (
+          <Card
+            className="bg-amber-100 border-amber-300 active:opacity-80"
+            onClick={loadAdminInbox}
+          >
+            <CardContent className="p-4 flex items-center gap-3">
+              <View className="w-10 h-10 rounded-full bg-amber-600 flex items-center justify-center">
+                <Shield size={20} color="#FFFDF7" />
+              </View>
+              <View className="flex-1">
+                <Text className="block text-base font-semibold text-stone-800">
+                  家族入册审核
+                </Text>
+                <Text className="block text-sm text-stone-500">
+                  处理族人入族申请，授权身份
+                </Text>
+              </View>
+            </CardContent>
+          </Card>
+        )}
 
         <Card
           className="bg-amber-50 border-stone-200 active:opacity-80"
@@ -742,6 +922,243 @@ const ProfilePage = () => {
               onClick={handleCreateFamily}
             >
               <Text>{creatingFamily ? '创建中...' : '创建'}</Text>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 申请加入家族 */}
+      <Dialog open={showApplyDialog} onOpenChange={setShowApplyDialog}>
+        <DialogContent className="bg-[#FFFDF7] rounded-2xl max-h-[86vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <HandHeart size={20} color="#134E4A" />
+              <Text>申请加入家族</Text>
+            </DialogTitle>
+            <DialogDescription>
+              <Text className="block">
+                填写族人信息提交申请，由家族管理员审核通过后即可归宗授权。
+              </Text>
+            </DialogDescription>
+          </DialogHeader>
+
+          <View className="flex flex-col gap-3">
+            <View className="flex flex-col gap-1">
+              <Label>姓名 *</Label>
+              <View className="bg-white border border-stone-200 rounded-xl px-4 py-3">
+                <Input
+                  className="w-full"
+                  value={applyForm.name}
+                  placeholder="您的姓名"
+                  onInput={(e) => setApplyForm({ ...applyForm, name: e.detail.value })}
+                />
+              </View>
+            </View>
+
+            <View className="flex flex-row gap-3">
+              <View className="flex-1 flex flex-col gap-1">
+                <Label>字辈</Label>
+                <View className="bg-white border border-stone-200 rounded-xl px-4 py-3">
+                  <Input
+                    className="w-full"
+                    value={applyForm.generation}
+                    placeholder="所属字辈"
+                    onInput={(e) => setApplyForm({ ...applyForm, generation: e.detail.value })}
+                  />
+                </View>
+              </View>
+              <View className="flex-1 flex flex-col gap-1">
+                <Label>世代称谓</Label>
+                <View className="bg-white border border-stone-200 rounded-xl px-4 py-3">
+                  <Input
+                    className="w-full"
+                    value={applyForm.generation_title}
+                    placeholder="如：第18世"
+                    onInput={(e) => setApplyForm({ ...applyForm, generation_title: e.detail.value })}
+                  />
+                </View>
+              </View>
+            </View>
+
+            <View className="flex flex-col gap-1">
+              <Label>手机号码 *</Label>
+              <View className="bg-white border border-stone-200 rounded-xl px-4 py-3">
+                <Input
+                  className="w-full"
+                  type="number"
+                  maxlength={11}
+                  value={applyForm.phone}
+                  placeholder="11位手机号"
+                  onInput={(e) => setApplyForm({ ...applyForm, phone: e.detail.value })}
+                />
+              </View>
+            </View>
+
+            <View className="flex flex-col gap-1">
+              <Label>现居住地</Label>
+              <View className="bg-white border border-stone-200 rounded-xl px-4 py-3">
+                <Input
+                  className="w-full"
+                  value={applyForm.residence}
+                  placeholder="省/市/区（县）"
+                  onInput={(e) => setApplyForm({ ...applyForm, residence: e.detail.value })}
+                />
+              </View>
+            </View>
+
+            <View className="flex flex-col gap-1">
+              <Label>申请人留言</Label>
+              <View className="bg-white border border-stone-200 rounded-xl px-4 py-3">
+                <Textarea
+                  style={{ width: '100%', minHeight: '80px', backgroundColor: 'transparent' }}
+                  maxlength={200}
+                  value={applyForm.message}
+                  placeholder="简单介绍您的家族渊源…"
+                  onInput={(e) => setApplyForm({ ...applyForm, message: e.detail.value })}
+                />
+              </View>
+            </View>
+
+            {myApps.length > 0 && (
+              <View className="bg-teal-50 border border-teal-100 rounded-xl p-3 flex flex-col gap-2">
+                <Text className="block text-sm font-semibold text-teal-800">
+                  我的申请记录
+                </Text>
+                {myApps.map((it) => (
+                  <View key={it.id} className="flex flex-row items-center justify-between gap-2">
+                    <Text className="block text-sm text-teal-700 flex-1">
+                      {it.name}（{it.statusLabel || statusText(it.status)}）
+                    </Text>
+                    {it.status === 'pending' && (
+                      <Text className="block text-xs text-amber-600 whitespace-nowrap">
+                        等待审核
+                      </Text>
+                    )}
+                  </View>
+                ))}
+                {myApps.some((it) => it.status === 'pending') && (
+                  <Text className="block text-xs text-stone-500">
+                    审核通过前无法加入，请留意申请状态。
+                  </Text>
+                )}
+              </View>
+            )}
+          </View>
+
+          <DialogFooter>
+            <Button
+              className="bg-stone-200 text-stone-700"
+              onClick={() => setShowApplyDialog(false)}
+            >
+              <Text>取消</Text>
+            </Button>
+            <Button
+              className="bg-teal-800 text-white"
+              disabled={submittingApply}
+              onClick={handleSubmitApply}
+            >
+              <Send size={16} color="#FFFDF7" />
+              <Text>{submittingApply ? '提交中...' : '提交申请'}</Text>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 管理员：入册审核 */}
+      <Dialog open={showAdminInbox} onOpenChange={setShowAdminInbox}>
+        <DialogContent className="bg-[#FFFDF7] rounded-2xl max-h-[86vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield size={20} color="#134E4A" />
+              <Text>家族入册审核</Text>
+            </DialogTitle>
+            <DialogDescription>
+              <Text className="block">
+                审核族人入族申请，通过后自动创建家族成员并授权身份。
+              </Text>
+            </DialogDescription>
+          </DialogHeader>
+
+          {adminApps.length === 0 ? (
+            <View className="py-10 flex flex-col items-center gap-2">
+              <Text className="block text-sm text-stone-400">
+                暂无待处理的申请
+              </Text>
+            </View>
+          ) : (
+            <View className="flex flex-col gap-3">
+              {adminApps.map((it) => (
+                <View
+                  key={it.id}
+                  className="bg-white border border-stone-200 rounded-xl p-4 flex flex-col gap-2"
+                >
+                  <View className="flex flex-row items-center justify-between">
+                    <View className="flex flex-row items-center gap-2">
+                      <Text className="block text-base font-semibold text-stone-800">
+                        {it.name}
+                      </Text>
+                      {it.generation && (
+                        <Text className="block text-sm text-stone-500">
+                          {it.generation_title || ''}·{it.generation}
+                        </Text>
+                      )}
+                    </View>
+                    <Badge
+                      className={
+                        it.status === 'pending'
+                          ? 'bg-amber-100 text-amber-700'
+                          : it.status === 'approved'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-red-100 text-red-600'
+                      }
+                    >
+                      <Text>{statusText(it.status)}</Text>
+                    </Badge>
+                  </View>
+                  <Text className="block text-sm text-stone-600">
+                    手机号：{it.phone || '-'}
+                  </Text>
+                  {it.residence && (
+                    <Text className="block text-sm text-stone-600">
+                      居住地：{it.residence}
+                    </Text>
+                  )}
+                  {it.message && (
+                    <Text className="block text-sm text-stone-500">
+                      留言：{it.message}
+                    </Text>
+                  )}
+                  {it.status === 'pending' && (
+                    <View className="flex flex-row gap-2 mt-1">
+                      <Button
+                        className="flex-1 bg-emerald-700 text-white"
+                        disabled={reviewingId === it.id}
+                        onClick={() => handleReview(it.id, 'approve')}
+                      >
+                        <Check size={16} color="#FFFDF7" />
+                        <Text>{reviewingId === it.id ? '处理中...' : '通过'}</Text>
+                      </Button>
+                      <Button
+                        className="flex-1 bg-red-700 text-white"
+                        disabled={reviewingId === it.id}
+                        onClick={() => handleReview(it.id, 'reject')}
+                      >
+                        <X size={16} color="#FFFDF7" />
+                        <Text>驳回</Text>
+                      </Button>
+                    </View>
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
+
+          <DialogFooter>
+            <Button
+              className="bg-stone-200 text-stone-700"
+              onClick={() => setShowAdminInbox(false)}
+            >
+              <Text>关闭</Text>
             </Button>
           </DialogFooter>
         </DialogContent>

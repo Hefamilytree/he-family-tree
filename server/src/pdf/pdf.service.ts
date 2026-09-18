@@ -39,6 +39,17 @@ const PAPER = '#fff8e7';
 const INK = '#1a1a1a';
 const BROWN = '#9a7b4f';
 
+/** 右侧栏内竖排绘制页码 */
+function drawPageNoLocal(doc: any, n: number) {
+  const s = `第${n}页`;
+  doc.fillColor('#7a5a2a').fontSize(16);
+  let y = 1218;
+  Array.from(s).forEach((ch) => {
+    doc.text(ch, 918, y, { lineBreak: false });
+    y += 26;
+  });
+}
+
 @Injectable()
 export class PdfService {
   private get supabase() {
@@ -172,12 +183,19 @@ export class PdfService {
     doc.registerFont('kai', this.fontPath());
     doc.font('kai');
 
+    let pageNo = 0;
+    const stamp = () => {
+      pageNo += 1;
+      drawPageNoLocal(doc, pageNo);
+    };
+
     const newPaper = (sidebarText: string) => {
       doc.addPage({ size: [PAGE_W, PAGE_H], margin: 0 });
       doc.rect(0, 0, PAGE_W, PAGE_H).fill(PAPER);
       doc.rect(0, 0, PAGE_W, PAGE_H).lineWidth(2).strokeColor(INK).stroke();
       doc.lineWidth(2).moveTo(PAGE_W - 110, 0).lineTo(PAGE_W - 110, PAGE_H).strokeColor(INK).stroke();
       drawSidebar(doc, sidebarText, hall);
+      stamp();
     };
 
     const pageTitle = (text: string) => {
@@ -201,6 +219,7 @@ export class PdfService {
           doc.rect(0, 0, PAGE_W, PAGE_H).lineWidth(2).strokeColor(INK).stroke();
           doc.lineWidth(2).moveTo(PAGE_W - 110, 0).lineTo(PAGE_W - 110, PAGE_H).strokeColor(INK).stroke();
           drawSidebar(doc, sidebar, hall);
+          stamp();
         },
       });
     };
@@ -229,26 +248,34 @@ export class PdfService {
     {
       newPaper(`${shiName}家族总目录`);
       pageTitle('目 录');
-      const catalog = ['一、家族源流家史', '二、家风家训祖训', '三、家族字辈排行', '四、家族大事记略', '五、世代人名索引', '六、历代世系总图', '七、卷末编录说明与后记'];
-      doc.fontSize(28).fillColor(INK);
-      let y = M_TOP + 110;
+      const catalog = ['一、家族源流', '二、家风', '三、家训', '四、家族字辈排行', '五、家族事记', '六、世代人名索引', '七、历代世系总图', '八、卷末编写说明与后记'];
+      doc.fontSize(26).fillColor(INK);
+      let y = M_TOP + 100;
       catalog.forEach((c) => {
-        doc.text(c, M_LEFT + 40, y, { lineBreak: false, characterSpacing: 6 });
-        y += 84;
+        doc.text(c, M_LEFT + 40, y, { lineBreak: false, characterSpacing: 5 });
+        y += 76;
       });
     }
 
-    // ===== 3. 家族源流家史 =====
+    // ===== 3. 家族源流（连接主程序家族源流，无需重复设置） =====
     {
-      const items = byCat('family_history').concat(byCat('migration'));
-      const text = items.map((i) => `${i.title}：${i.content || ''}`).join('\n\n') || family.description || '';
-      if (text) verticalText(text, `${shiName}家族源流家史`, '家族源流家史');
+      const srcParts: string[] = [];
+      if (family.origin) srcParts.push(family.origin);
+      if (family.description) srcParts.push(family.description);
+      ['merit', 'migration'].forEach((cat) => {
+        byCat(cat).forEach((i) => srcParts.push(i.content || ''));
+      });
+      const text = srcParts.filter(Boolean).join('\n\n');
+      if (text) verticalText(text, `${shiName}家族源流`, '家族源流');
     }
 
-    // ===== 4. 家风家训（家风 / 家训 两栏竖排） =====
+    // ===== 4. 家风 / 家训（两个独立单元，各自连接小程序板块） =====
     {
-      const left = byCat('family_motto').map((i) => i.content).filter(Boolean).join('\n');
-      const right = family.motto || byCat('honor').map((i) => i.content).filter(Boolean).join('\n');
+      const familyStyle = byCat('family_style').concat(byCat('family_motto')).map((i) => i.content).filter(Boolean).join('\n');
+      const familyRule = [family.motto, ...byCat('family_instruction').map((i) => i.content).filter(Boolean)]
+        .filter(Boolean).join('\n') || byCat('family_motto').map((i) => i.content).filter(Boolean).join('\n');
+      const left = familyStyle; // 家风
+      const right = familyRule; // 家训
       if (left || right) {
         newPaper(`${shiName}家风家训祖训`);
         pageTitle('家风家训祖训');
@@ -259,6 +286,7 @@ export class PdfService {
           doc.rect(0, 0, PAGE_W, PAGE_H).lineWidth(2).strokeColor(INK).stroke();
           doc.lineWidth(2).moveTo(PAGE_W - 110, 0).lineTo(PAGE_W - 110, PAGE_H).stroke();
           drawSidebar(doc, sb, hall);
+          stamp();
         };
         // 右栏（家训），左栏（家风）
         drawVertical(doc, right || '', { rightX: RIGHT_X - 60, leftX: M_LEFT + 250, topY: colTop, bottomY: colBottom, fontSize: 19, onNewPage: onNew(`${shiName}家风家训祖训`) });
@@ -290,9 +318,9 @@ export class PdfService {
 
     // ===== 6. 家族大事记略 =====
     {
-      const ev = byCat('event').concat(byCat('person_history'));
+      const ev = byCat('family_history').concat(byCat('person_history')).concat(byCat('event'));
       const text = ev.map((i) => `${i.title}：${i.content || ''}`).join('\n\n');
-      if (text) verticalText(text, `${shiName}家族大事记略`, '家族大事记略');
+      if (text) verticalText(text, `${shiName}家族事记`, '家族事记');
     }
 
     // ===== 7. 世代人名索引（两列，按世分组） =====
@@ -377,6 +405,7 @@ export class PdfService {
           doc.rect(0, 0, PAGE_W, PAGE_H).lineWidth(2).strokeColor(INK).stroke();
           doc.lineWidth(2).moveTo(PAGE_W - 110, 0).lineTo(PAGE_W - 110, PAGE_H).stroke();
           drawSidebar(doc, sb, hall);
+          stamp();
         };
         drawVertical(doc, note, { rightX: RIGHT_X - 60, leftX: M_LEFT + 250, topY: colTop, bottomY: BOTTOM_Y, fontSize: 19, onNewPage: onNew(`${shiName}卷末编录后记`) });
         drawVertical(doc, ps, { rightX: RIGHT_X - 330, leftX: M_LEFT + 30, topY: colTop, bottomY: BOTTOM_Y, fontSize: 19, onNewPage: onNew(`${shiName}卷末编录后记`) });

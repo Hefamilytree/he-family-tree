@@ -156,6 +156,30 @@ export const kinContacts = pgTable(
   }
 );
 
+// 申请加入家族（需管理员授权）
+export const familyApplications = pgTable(
+  "family_applications",
+  {
+    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+    family_id: varchar("family_id", { length: 36 }).references(() => families.id, { onDelete: "set null" }),
+    applicant_id: varchar("applicant_id", { length: 36 }).references(() => users.id, { onDelete: "set null" }),
+    name: varchar("name", { length: 64 }).notNull(),
+    generation: varchar("generation", { length: 64 }),
+    generation_title: varchar("generation_title", { length: 32 }),
+    phone: varchar("phone", { length: 32 }),
+    residence: varchar("residence", { length: 255 }),
+    message: text("message"),
+    status: varchar("status", { length: 16 }).notNull().default("pending"),
+    reviewed_by: varchar("reviewed_by", { length: 36 }),
+    reviewed_at: timestamp("reviewed_at", { withTimezone: true }),
+    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("family_applications_status_idx").on(table.status),
+  ]
+);
+
 // 评论表
 export const comments = pgTable(
   "comments",
