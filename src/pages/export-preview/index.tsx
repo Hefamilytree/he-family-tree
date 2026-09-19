@@ -5,7 +5,7 @@ import { ChevronLeft, Share2, FileText, Check } from 'lucide-react-taro';
 import { Network } from '@/network';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { toLunarBirth } from '@/utils/lunar';
+import { toLunarBirth, toChineseNum } from '@/utils/lunar';
 import './index.css';
 
 interface Family {
@@ -351,21 +351,27 @@ const ExportPreviewPage: React.FC = () => {
       </View>
 
       <View className="px-3 py-4 max-w-xl mx-auto">
-        {/* ===== 封面 ===== */}
+        {/* ===== 封面（三列竖排，与打印模板一致） ===== */}
         <Sheet>
           <View className="cover-border flex items-center justify-center" style={{ minHeight: '900rpx' }}>
-            <View className="items-center">
-              {family.hall_name ? (
-                <Text className="block text-base tracking-widest mb-8" style={{ color: '#5a4a3a', fontFamily: 'STKaiti, KaiTi, serif' }}>
-                  {family.hall_name}
-                </Text>
-              ) : null}
-              <Text className="v-title text-center" style={{ fontSize: '88rpx', height: '520rpx' }}>
-                {family.family_name}族谱
-              </Text>
-              <Text className="cover-seal block text-sm mt-10 px-4 py-2">
-                {yearText}年重修
-              </Text>
+            <View className="cover-cols">
+              {/* 列1（最右）：宗譜 + 宗族源远 */}
+              <View className="cover-col">
+                <Text className="cover-top">{family.family_name}宗譜</Text>
+                <Text className="cover-sub">宗族源远</Text>
+              </View>
+              {/* 列2（中）：堂号 + 族譜双线框 + 世代绵延 */}
+              <View className="cover-col">
+                {family.hall_name ? <Text className="cover-hall">{family.hall_name}</Text> : null}
+                <View className="cover-title-box">
+                  <Text className="cover-title">{family.family_name}族譜</Text>
+                </View>
+                <Text className="cover-sub">世代绵延</Text>
+              </View>
+              {/* 列3（最左）：纪年 */}
+              <View className="cover-col">
+                <Text className="cover-date">{yearText}年重修</Text>
+              </View>
             </View>
           </View>
         </Sheet>
@@ -404,6 +410,7 @@ const ExportPreviewPage: React.FC = () => {
         <Sheet sidebar={sidebarText}>
           <Text className="v-title block mb-4" style={{ fontSize: '38rpx' }}>字辈谱</Text>
           <View className="v-columns">
+            <Text className="v-col-label" style={{ color: '#8b2500', fontWeight: '700' }}>{`${family.family_name}族谱字辈如下：`}</Text>
             {(() => {
               const titleSet = Array.from(new Set(members.map((m) => m.generation_title).filter(Boolean))) as string[];
               if (titleSet.length === 0) {
@@ -431,7 +438,7 @@ const ExportPreviewPage: React.FC = () => {
         {/* ===== 世系正文（按世分页） ===== */}
         {sortedGens.map((gen) => (
           <Sheet key={gen} sidebar={sidebarText}>
-            <Text className="v-title block mb-4" style={{ fontSize: '40rpx' }}>{`第${gen}世`}</Text>
+            <Text className="v-title block mb-4" style={{ fontSize: '40rpx' }}>{`第${toChineseNum(gen)}世`}</Text>
             <View className="v-columns">
               {generations[gen].map((m) => {
                 const birth = m.birth_date ? toLunarBirth(m.birth_date) : '生失考';

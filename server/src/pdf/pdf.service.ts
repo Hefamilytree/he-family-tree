@@ -3,7 +3,7 @@ import { join } from 'path';
 import { existsSync } from 'fs';
 import * as PDFDocument from 'pdfkit';
 import { getSupabaseClient } from '../storage/database/supabase-client';
-import { toLunar, currentGanZhiYear, drawVertical, drawSidebar } from './pdf.helpers';
+import { toLunar, currentGanZhiYear, drawVertical, drawSidebar, toChineseNum } from './pdf.helpers';
 
 interface RawMember {
   id: string;
@@ -40,15 +40,6 @@ const INK = '#1a1a1a';
 const BROWN = '#9a7b4f';
 
 /** 右侧栏内竖排绘制页码 */
-function drawPageNoLocal(doc: any, n: number) {
-  const s = `第${n}页`;
-  doc.fillColor('#7a5a2a').fontSize(16);
-  let y = 1218;
-  Array.from(s).forEach((ch) => {
-    doc.text(ch, 918, y, { lineBreak: false });
-    y += 26;
-  });
-}
 
 @Injectable()
 export class PdfService {
@@ -110,8 +101,8 @@ export class PdfService {
   private memberLine(m: RawMember): string {
     const parts: string[] = [m.name];
     const genTxt = m.generation_title
-      ? `第${m.generation}世·${m.generation_title}`
-      : `第${m.generation}世`;
+      ? `第${toChineseNum(m.generation)}世·${m.generation_title}`
+      : `第${toChineseNum(m.generation)}世`;
     parts.push(genTxt);
     if (m.birth_date) parts.push(`生於${toLunar(m.birth_date)}`);
     if (!m.birth_date) parts.push('生失考');
@@ -184,19 +175,18 @@ export class PdfService {
     doc.font('kai');
 
     let pageNo = 0;
-    const stamp = () => {
-      pageNo += 1;
-      drawPageNoLocal(doc, pageNo);
-    };
 
     const newPaper = (sidebarText: string) => {
+      pageNo += 1;
       doc.addPage({ size: [PAGE_W, PAGE_H], margin: 0 });
       doc.rect(0, 0, PAGE_W, PAGE_H).fill(PAPER);
       doc.rect(0, 0, PAGE_W, PAGE_H).lineWidth(2).strokeColor(INK).stroke();
       doc.lineWidth(2).moveTo(PAGE_W - 110, 0).lineTo(PAGE_W - 110, PAGE_H).strokeColor(INK).stroke();
-      drawSidebar(doc, sidebarText, hall);
-      stamp();
+      drawSidebar(doc, sidebarText, pageNo, hall);
     };
+
+    // 封面为第 1 页（无侧栏、无页码），使其后目录成为第二页
+    pageNo = 1;
 
     const pageTitle = (text: string) => {
       doc.fontSize(34).fillColor(INK).text(text, M_LEFT, M_TOP - 20, {
@@ -215,33 +205,35 @@ export class PdfService {
         bottomY: BOTTOM_Y,
         fontSize: 20,
         onNewPage: () => {
+          pageNo += 1;
           doc.rect(0, 0, PAGE_W, PAGE_H).fill(PAPER);
           doc.rect(0, 0, PAGE_W, PAGE_H).lineWidth(2).strokeColor(INK).stroke();
           doc.lineWidth(2).moveTo(PAGE_W - 110, 0).lineTo(PAGE_W - 110, PAGE_H).strokeColor(INK).stroke();
-          drawSidebar(doc, sidebar, hall);
-          stamp();
+          drawSidebar(doc, sidebar, pageNo, hall);
         },
       });
     };
 
-    // ===== 1. 封面 =====
+    // ===== 1. 封面（模板三列竖排：右 宗譜+宗族源远 / 中 堂号+族譜双线框+世代绵延 / 左 纪年） =====
     {
       doc.addPage({ size: [PAGE_W, PAGE_H], margin: 0 });
       doc.rect(0, 0, PAGE_W, PAGE_H).fill(PAPER);
       doc.rect(0, 0, PAGE_W, PAGE_H).lineWidth(2).strokeColor(INK).stroke();
-      doc.fillColor('#2b1a08');
-      // 右块：宗谱
-      drawVertical(doc, `${shiName}宗譜`, { rightX: 760, leftX: 700, topY: 360, bottomY: 700, fontSize: 30, color: '#3a2410' });
-      drawVertical(doc, '宗族源远', { rightX: 760, leftX: 700, topY: 780, bottomY: 1000, fontSize: 24, color: '#3a2410' });
-      // 中块：堂号 + 族谱大标题（双线框）+ 世代绵延
-      if (hall) drawVertical(doc, hall, { rightX: 560, leftX: 470, topY: 240, bottomY: 420, fontSize: 40, color: '#2b1a08' });
-      doc.lineWidth(1.5).strokeColor('#4a2f12');
-      doc.rect(405, 470, 170, 470).stroke();
-      doc.rect(415, 480, 150, 450).stroke();
-      drawVertical(doc, `${shiName}族譜`, { rightX: 535, leftX: 445, topY: 540, bottomY: 900, fontSize: 72, color: '#1a0f03' });
-      drawVertical(doc, '世代绵延', { rightX: 330, leftX: 270, topY: 620, bottomY: 820, fontSize: 24, color: '#3a2410' });
-      // 左块：纪年
-      drawVertical(doc, `${ganzhi}年重修`, { rightX: 200, leftX: 130, topY: 560, bottomY: 860, fontSize: 28, color: '#2b1a08' });
+
+      // 列1（最右）：宗譜 + 宗族源远（同列上下）
+      drawVertical(doc, `${shiName}宗譜`, { rightX: 790, leftX: 730, topY: 360, bottomY: 690, fontSize: 30, color: '#3a2410' });
+      drawVertical(doc, '宗族源远', { rightX: 790, leftX: 730, topY: 800, bottomY: 1030, fontSize: 24, color: '#3a2410' });
+
+      // 列2（中）：堂号 + 族譜大字双线框 + 世代绵延（同列堆叠）
+      if (hall) drawVertical(doc, hall, { rightX: 555, leftX: 465, topY: 220, bottomY: 400, fontSize: 40, color: '#2b1a08' });
+      doc.lineWidth(1.6).strokeColor('#4a2f12');
+      doc.rect(405, 430, 170, 470).stroke();
+      doc.rect(415, 440, 150, 450).stroke();
+      drawVertical(doc, `${shiName}族譜`, { rightX: 535, leftX: 445, topY: 520, bottomY: 900, fontSize: 72, color: '#1a0f03' });
+      drawVertical(doc, '世代绵延', { rightX: 555, leftX: 465, topY: 980, bottomY: 1140, fontSize: 24, color: '#3a2410' });
+
+      // 列3（最左）：纪年
+      drawVertical(doc, `${ganzhi}年重修`, { rightX: 205, leftX: 135, topY: 560, bottomY: 860, fontSize: 28, color: '#2b1a08' });
     }
 
     // ===== 2. 目录 =====
@@ -282,11 +274,11 @@ export class PdfService {
         const colTop = M_TOP + 80;
         const colBottom = BOTTOM_Y;
         const onNew = (sb: string) => () => {
+          pageNo += 1;
           doc.rect(0, 0, PAGE_W, PAGE_H).fill(PAPER);
           doc.rect(0, 0, PAGE_W, PAGE_H).lineWidth(2).strokeColor(INK).stroke();
           doc.lineWidth(2).moveTo(PAGE_W - 110, 0).lineTo(PAGE_W - 110, PAGE_H).stroke();
-          drawSidebar(doc, sb, hall);
-          stamp();
+          drawSidebar(doc, sb, pageNo, hall);
         };
         // 右栏（家训），左栏（家风）
         drawVertical(doc, right || '', { rightX: RIGHT_X - 60, leftX: M_LEFT + 250, topY: colTop, bottomY: colBottom, fontSize: 19, onNewPage: onNew(`${shiName}家风家训祖训`) });
@@ -309,10 +301,14 @@ export class PdfService {
       });
       const rankLines: string[] = [];
       Array.from(titleSet.keys()).sort((a, b) => a - b).forEach((g) => {
-        rankLines.push(`第${g}世：${Array.from(titleSet.get(g)!).join('、')}`);
+        rankLines.push(`第${toChineseNum(g)}世：${Array.from(titleSet.get(g)!).join('、')}`);
       });
       const culturalRank = byCat('rank').map((i) => i.content).filter(Boolean).join('\n');
-      const text = rankLines.join('\n') + (culturalRank ? `\n${culturalRank}` : '');
+      const rankBody = rankLines.join('\n');
+      // 模板规范：字辈由“如下：”后开始引用
+      const text = (rankBody || culturalRank)
+        ? `何氏族谱字辈如下：\n${rankBody}${culturalRank ? (rankBody ? `\n${culturalRank}` : culturalRank) : ''}`
+        : '';
       if (text) verticalText(text, `${shiName}家族字辈排行`, '家族字辈排行');
     }
 
@@ -339,7 +335,7 @@ export class PdfService {
           let y = startY;
           doc.lineWidth(2).strokeColor('#2b1a08');
           doc.rect(x, y, colW - 24, 48).fillAndStroke('rgba(154,123,79,0.12)', '#2b1a08');
-          doc.fillColor(INK).fontSize(22).text(`第${gen}世`, x, y + 9, { width: colW - 24, align: 'center', characterSpacing: 4 });
+          doc.fillColor(INK).fontSize(22).text(`第${toChineseNum(gen)}世`, x, y + 9, { width: colW - 24, align: 'center', characterSpacing: 4 });
           y += 48;
           doc.fontSize(19);
           names.forEach((n) => {
@@ -383,7 +379,7 @@ export class PdfService {
           }
           // 黑底世数标签
           doc.rect(lineX, y + 4, 76, 38).fill(INK);
-          doc.fillColor('#fff').fontSize(19).text(`第${m.generation}世`, lineX, y + 11, { width: 76, align: 'center' });
+          doc.fillColor('#fff').fontSize(19).text(`第${toChineseNum(m.generation)}世`, lineX, y + 11, { width: 76, align: 'center' });
           doc.fillColor(INK).fontSize(20);
           doc.text(line, textX, y, { width: maxW });
           doc.moveTo(lineX, y + h - 4).lineTo(RIGHT_X, y + h - 4).lineWidth(1).strokeColor(INK).stroke();
@@ -401,11 +397,11 @@ export class PdfService {
         pageTitle('卷末');
         const colTop = M_TOP + 80;
         const onNew = (sb: string) => () => {
+          pageNo += 1;
           doc.rect(0, 0, PAGE_W, PAGE_H).fill(PAPER);
           doc.rect(0, 0, PAGE_W, PAGE_H).lineWidth(2).strokeColor(INK).stroke();
           doc.lineWidth(2).moveTo(PAGE_W - 110, 0).lineTo(PAGE_W - 110, PAGE_H).stroke();
-          drawSidebar(doc, sb, hall);
-          stamp();
+          drawSidebar(doc, sb, pageNo, hall);
         };
         drawVertical(doc, note, { rightX: RIGHT_X - 60, leftX: M_LEFT + 250, topY: colTop, bottomY: BOTTOM_Y, fontSize: 19, onNewPage: onNew(`${shiName}卷末编录后记`) });
         drawVertical(doc, ps, { rightX: RIGHT_X - 330, leftX: M_LEFT + 30, topY: colTop, bottomY: BOTTOM_Y, fontSize: 19, onNewPage: onNew(`${shiName}卷末编录后记`) });

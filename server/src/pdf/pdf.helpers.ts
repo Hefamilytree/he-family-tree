@@ -85,18 +85,46 @@ export function drawVertical(
   return { x, y, finished: true };
 }
 
-/** 竖排绘制右侧栏文字（逐字直立、字距大） */
-export function drawSidebar(doc: any, text: string, hallName?: string) {
-  const x = 912; // 110px 侧栏中线 (842 + 55)
+/** 竖排绘制右侧栏文字（逐字直立、字距大，含页码与堂号）
+ *  模板格式：`家族名xxx 第N页 堂号`，逐字竖排居中于侧栏中线 */
+function toChineseNumber(n: number): string {
+  const digits = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+  const units = ['', '十', '百', '千'];
+  if (n <= 0) return digits[n] || String(n);
+  const s = String(n);
+  let out = '';
+  const len = s.length;
+  for (let i = 0; i < len; i++) {
+    const d = +s[i];
+    const u = units[len - 1 - i];
+    if (d === 0) {
+      if (out && !out.endsWith('零') && i < len - 1) out += '零';
+    } else {
+      out += digits[d] + u;
+    }
+  }
+  out = out.replace(/零+/g, '零').replace(/零$/g, '');
+  if (out.startsWith('一十')) out = out.slice(1);
+  return out;
+}
+
+/** 数字转中文（供世代序号等使用） */
+export function toChineseNum(n: number): string {
+  return toChineseNumber(n);
+}
+
+export function drawSidebar(doc: any, text: string, pageNo: number, hallName?: string) {
+  const x = 925; // 110px 侧栏中线 (870 + 110/2)
   let y = 60;
   doc.fontSize(22).fillColor('#3a2410');
-  const full = hallName ? `${text} ${hallName}` : text;
+  const pageCn = toChineseNumber(pageNo);
+  const full = hallName ? `${text} 第${pageCn}页 ${hallName}` : `${text} 第${pageCn}页`;
   Array.from(full).forEach((ch) => {
     if (ch === ' ') {
-      y += 20;
+      y += 40;
       return;
     }
-    doc.text(ch, x, y, { lineBreak: false });
-    y += 60;
+    doc.text(ch, x, y, { lineBreak: false, characterSpacing: 0 });
+    y += 58;
   });
 }

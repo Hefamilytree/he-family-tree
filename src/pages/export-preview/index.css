@@ -79,6 +79,57 @@
   outline-offset: 10rpx;
 }
 
+/* 封面三列（模板 cover-inner：row-reverse 竖排三列居中，gap 70） */
+.cover-cols {
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: center;
+  align-items: center;
+  gap: 70rpx;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  padding: 40rpx 30rpx;
+}
+.cover-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40rpx;
+  font-family: STKaiti, KaiTi, serif;
+}
+.cover-top {
+  font-size: 28rpx;
+  letter-spacing: 8rpx;
+  color: #3a2410;
+}
+.cover-hall {
+  font-size: 46rpx;
+  font-weight: 700;
+  letter-spacing: 12rpx;
+  color: #2b1a08;
+}
+.cover-title-box {
+  border: 4rpx double #4a2f12;
+  padding: 25rpx 20rpx;
+}
+.cover-title {
+  font-size: 88rpx;
+  font-weight: 700;
+  letter-spacing: 14rpx;
+  color: #1a0f03;
+  line-height: 1.2;
+}
+.cover-sub {
+  font-size: 26rpx;
+  letter-spacing: 6rpx;
+  color: #3a2410;
+}
+.cover-date {
+  font-size: 30rpx;
+  letter-spacing: 8rpx;
+  color: #2b1a08;
+}
+
 .cover-seal {
   display: inline-block;
   border: 3rpx solid #8b2500;
