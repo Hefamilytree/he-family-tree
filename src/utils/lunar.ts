@@ -82,13 +82,3 @@ function toChineseNumber(n: number): string {
 export function toChineseNum(n: number): string {
   return toChineseNumber(n)
 }
-
-const GAN = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸']
-const ZHI = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥']
-
-/** 计算某年的干支纪年（如 2026 → 丙午） */
-export function toGanZhiYear(year: number): string {
-  const g = GAN[(year - 4) % 10]
-  const z = ZHI[(year - 4) % 12]
-  return `${g}${z}`
-}

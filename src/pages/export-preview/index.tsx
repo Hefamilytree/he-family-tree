@@ -5,7 +5,7 @@ import { ChevronLeft, Share2, FileText, Check } from 'lucide-react-taro';
 import { Network } from '@/network';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { toLunarBirth, toChineseNum, toGanZhiYear } from '@/utils/lunar';
+import { toLunarBirth, toChineseNum } from '@/utils/lunar';
 import './index.css';
 
 interface Family {
@@ -368,9 +368,9 @@ const ExportPreviewPage: React.FC = () => {
                 </View>
                 <Text className="cover-sub">世代绵延</Text>
               </View>
-              {/* 列3（最左）：纪年（干支，与打印一致，格式固化） */}
+              {/* 列3（最左）：纪年 */}
               <View className="cover-col">
-                <Text className="cover-date">{toGanZhiYear(yearText)}年重修</Text>
+                <Text className="cover-date">{yearText}年重修</Text>
               </View>
             </View>
           </View>

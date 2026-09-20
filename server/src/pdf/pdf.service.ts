@@ -319,7 +319,7 @@ export class PdfService {
       if (text) verticalText(text, `${shiName}家族事记`, '家族事记');
     }
 
-    // ===== 7. 世代人名索引（两列，按世分组，人名后附阿拉伯数字页码） =====
+    // ===== 7. 世代人名索引（两列，按世分组） =====
     {
       const genMap = new Map<number, string[]>();
       members.forEach((m) => {
@@ -329,23 +329,6 @@ export class PdfService {
       if (genMap.size) {
         newPaper(`${shiName}世代人名索引`);
         pageTitle('世代人名索引');
-        // 预计算每位宗亲在“历代世系总图”中的页码（从该板块后的下一板块起），显示阿拉伯数字
-        const lineagePageOf = new Map<string, number>();
-        if (members.length) {
-          const pW = RIGHT_X - (M_LEFT + 92);
-          let curPage = pageNo + 1; // 下一板块（历代世系总图）起始页
-          let used = 0;
-          members.forEach((m) => {
-            const line = this.memberLine(m);
-            const h = Math.max(56, doc.heightOfString(line, { width: pW }) + 24);
-            if (used + h > (BOTTOM_Y - (M_TOP + 80))) {
-              curPage += 1;
-              used = 0;
-            }
-            lineagePageOf.set(m.id, curPage);
-            used += h;
-          });
-        }
         const groups = Array.from(genMap.keys()).sort((a, b) => a - b);
         const colW = (RIGHT_X - M_LEFT) / 2;
         const drawGroup = (gen: number, names: string[], x: number, startY: number): number => {
@@ -356,11 +339,7 @@ export class PdfService {
           y += 48;
           doc.fontSize(19);
           names.forEach((n) => {
-            const mem = members.find((mm) => mm.name === n && (mm.generation ?? 0) === gen);
-            const page = mem
-              ? lineagePageOf.get(mem.id)
-              : (groups.findIndex((g) => g === gen) > 0 ? 8 + groups.findIndex((g) => g === gen) : 8);
-            doc.text(`${n}  ${page ?? ''}`, x + 12, y, { lineBreak: false });
+            doc.text(n, x + 12, y, { lineBreak: false });
             doc.moveTo(x + 10, y + 30).lineTo(x + colW - 34, y + 30).dash(2, 2).strokeColor('#b59565').stroke();
             doc.undash();
             y += 34;
