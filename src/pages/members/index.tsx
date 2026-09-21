@@ -93,15 +93,24 @@ export default function Members() {
       }));
       setMembers(list);
       setFilteredMembers(list);
-      // 家族字辈选项：从「家族字辈」板块内容提取
+      // 家族字辈选项：从「家族字辈」板块内容提取；
+      // 字辈排序从「如下：」之后开始（第一世从「如下：」后才计，前面的引导文字仅限打印引用，不属字辈）
       const honorList = honorRes.data?.data || [];
-      const options: GenerationOption[] = [];
+      const raws: string[] = [];
       honorList.forEach((item: any) => {
-        const content = item.content ? String(item.content) : '';
-        content.split(/[\s,，、\/\n]+/).forEach((c: string) => {
-          const t = c.trim();
-          if (t && !options.find(o => o.title === t)) options.push({ title: t });
-        });
+        let content = item.content ? String(item.content) : '';
+        const idx = content.indexOf('如下：');
+        if (idx >= 0) content = content.slice(idx + 3);
+        else {
+          const idx2 = content.indexOf('如下:');
+          if (idx2 >= 0) content = content.slice(idx2 + 3);
+        }
+        raws.push(content);
+      });
+      const options: GenerationOption[] = [];
+      raws.join(' ').split(/[\s,，、\/\n]+/).forEach((c: string) => {
+        const t = c.trim();
+        if (t && !options.find(o => o.title === t)) options.push({ title: t });
       });
       setGenerationOptions(options);
       return { list, options };

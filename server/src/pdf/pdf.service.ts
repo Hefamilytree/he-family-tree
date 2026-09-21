@@ -220,17 +220,18 @@ export class PdfService {
       doc.rect(0, 0, PAGE_W, PAGE_H).fill(PAPER);
       doc.rect(0, 0, PAGE_W, PAGE_H).lineWidth(2).strokeColor(INK).stroke();
 
-      // 列1（最右）：宗譜 + 宗族源远（同列上下）
-      drawVertical(doc, `${shiName}宗譜`, { rightX: 790, leftX: 730, topY: 360, bottomY: 690, fontSize: 30, color: '#3a2410' });
-      drawVertical(doc, '宗族源远', { rightX: 790, leftX: 730, topY: 800, bottomY: 1030, fontSize: 24, color: '#3a2410' });
+      // 封面固定三列竖排（与预览模板一致，中列文字居中于双线框中心 490，不再错位）
+      // 列1（最右）：家族名宗譜 + 宗族源远（同列上下）
+      drawVertical(doc, `${shiName}宗譜`, { rightX: 788, leftX: 728, topY: 340, bottomY: 700, fontSize: 30, color: '#3a2410' });
+      drawVertical(doc, '宗族源远', { rightX: 788, leftX: 728, topY: 790, bottomY: 1050, fontSize: 24, color: '#3a2410' });
 
-      // 列2（中）：堂号 + 族譜大字双线框 + 世代绵延（同列堆叠）
-      if (hall) drawVertical(doc, hall, { rightX: 555, leftX: 465, topY: 220, bottomY: 400, fontSize: 40, color: '#2b1a08' });
+      // 列2（中）：堂号 + 族譜大字双线框 + 世代绵延，全部以框中心 490 竖直排布
+      if (hall) drawVertical(doc, hall, { rightX: 470, leftX: 400, topY: 200, bottomY: 380, fontSize: 40, color: '#2b1a08' });
       doc.lineWidth(1.6).strokeColor('#4a2f12');
       doc.rect(405, 430, 170, 470).stroke();
       doc.rect(415, 440, 150, 450).stroke();
-      drawVertical(doc, `${shiName}族譜`, { rightX: 535, leftX: 445, topY: 520, bottomY: 900, fontSize: 72, color: '#1a0f03' });
-      drawVertical(doc, '世代绵延', { rightX: 555, leftX: 465, topY: 980, bottomY: 1140, fontSize: 24, color: '#3a2410' });
+      drawVertical(doc, `${shiName}族譜`, { rightX: 454, leftX: 382, topY: 520, bottomY: 900, fontSize: 72, color: '#1a0f03' });
+      drawVertical(doc, '世代绵延', { rightX: 478, leftX: 406, topY: 980, bottomY: 1140, fontSize: 24, color: '#3a2410' });
 
       // 列3（最左）：纪年
       drawVertical(doc, `${ganzhi}年重修`, { rightX: 205, leftX: 135, topY: 560, bottomY: 860, fontSize: 28, color: '#2b1a08' });
@@ -303,12 +304,13 @@ export class PdfService {
       Array.from(titleSet.keys()).sort((a, b) => a - b).forEach((g) => {
         rankLines.push(`第${toChineseNum(g)}世：${Array.from(titleSet.get(g)!).join('、')}`);
       });
-      const culturalRank = byCat('rank').map((i) => i.content).filter(Boolean).join('\n');
+      const culturalRank = byCat('honor').map((i) => i.content).filter(Boolean).join('\n\n');
       const rankBody = rankLines.join('\n');
-      // 模板规范：字辈由“如下：”后开始引用
-      const text = (rankBody || culturalRank)
-        ? `何氏族谱字辈如下：\n${rankBody}${culturalRank ? (rankBody ? `\n${culturalRank}` : culturalRank) : ''}`
-        : '';
+      // 打印显示全部内容：优先完整引用「家族字辈」honor 板块（含“如下：”引导与全部辈字），
+      // 该板块为空时才回退到按成员 generation_title 推导的字辈行。
+      const text = culturalRank
+        ? (rankBody ? `${culturalRank}\n\n--- 另可参考成员世系字辈 ---\n\n${rankBody}` : culturalRank)
+        : (rankBody ? `何氏族谱字辈如下：\n${rankBody}` : '');
       if (text) verticalText(text, `${shiName}家族字辈排行`, '家族字辈排行');
     }
 
@@ -319,8 +321,28 @@ export class PdfService {
       if (text) verticalText(text, `${shiName}家族事记`, '家族事记');
     }
 
-    // ===== 7. 世代人名索引（两列，按世分组） =====
+    // ===== 7. 世代人名索引（两列，按世分组；人名后标注其所在“历代世系表”的相对页，使用阿拉伯数字） =====
     {
+      // 先模拟历代世系表分页：记录每个成员所在世系表相对页（第1页起），与第8节排版规则一致
+      const pageOf = new Map<string, number>();
+      {
+        let _y = M_TOP + 80;
+        let _pg = 1;
+        const _lineX = M_LEFT;
+        const _textX = M_LEFT + 92;
+        const _maxW = RIGHT_X - _textX;
+        doc.fontSize(20);
+        members.forEach((m) => {
+          const line = this.memberLine(m);
+          const h = Math.max(56, doc.heightOfString(line, { width: _maxW }) + 24);
+          if (_y + h > BOTTOM_Y) {
+            _pg += 1;
+            _y = M_TOP + 80;
+          }
+          pageOf.set(m.id, _pg);
+          _y += h;
+        });
+      }
       const genMap = new Map<number, string[]>();
       members.forEach((m) => {
         if (!genMap.has(m.generation)) genMap.set(m.generation, []);
@@ -339,7 +361,10 @@ export class PdfService {
           y += 48;
           doc.fontSize(19);
           names.forEach((n) => {
-            doc.text(n, x + 12, y, { lineBreak: false });
+            const m = members.find((mm) => mm.name === n && mm.generation === gen);
+            const relPage = m ? pageOf.get(m.id) : undefined;
+            // 人名 + 阿拉伯数字相对页（如 “何氏族谱 3”）；页号指向该成员在“历代世系表”中的位置
+            doc.text(`${n}，${relPage ?? '—'}`, x + 12, y, { lineBreak: false, characterSpacing: 2 });
             doc.moveTo(x + 10, y + 30).lineTo(x + colW - 34, y + 30).dash(2, 2).strokeColor('#b59565').stroke();
             doc.undash();
             y += 34;
