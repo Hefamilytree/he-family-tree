@@ -214,27 +214,45 @@ export class PdfService {
       });
     };
 
-    // ===== 1. 封面（模板三列竖排：右 宗譜+宗族源远 / 中 堂号+族譜双线框+世代绵延 / 左 纪年） =====
+    // ===== 1. 封面（9.21 新模板：竖版 980×1380 单页；中央主框 + 框左侧上下副文 + 左下纪年 + 框右侧堂号） =====
     {
       doc.addPage({ size: [PAGE_W, PAGE_H], margin: 0 });
       doc.rect(0, 0, PAGE_W, PAGE_H).fill(PAPER);
       doc.rect(0, 0, PAGE_W, PAGE_H).lineWidth(2).strokeColor(INK).stroke();
 
-      // 封面固定三列竖排（与预览模板一致，中列文字居中于双线框中心 490，不再错位）
-      // 列1（最右）：家族名宗譜 + 宗族源远（同列上下）
-      drawVertical(doc, `${shiName}宗譜`, { rightX: 788, leftX: 728, topY: 340, bottomY: 700, fontSize: 30, color: '#3a2410' });
-      drawVertical(doc, '宗族源远', { rightX: 788, leftX: 728, topY: 790, bottomY: 1050, fontSize: 24, color: '#3a2410' });
+      // 中央主标题框 cover-title-box：right:26% top:10% width:22% height:80%
+      // 水平 left=509.6 right=725.2；垂直 top=138 bottom=1242；中心 x≈617
+      const boxL = 510;
+      const boxR = 725;
+      const boxT = 138;
+      const boxB = 1242;
+      const boxCX = (boxL + boxR) / 2;
 
-      // 列2（中）：堂号 + 族譜大字双线框 + 世代绵延，全部以框中心 490 竖直排布
-      if (hall) drawVertical(doc, hall, { rightX: 470, leftX: 400, topY: 200, bottomY: 380, fontSize: 40, color: '#2b1a08' });
-      doc.lineWidth(1.6).strokeColor('#4a2f12');
-      doc.rect(405, 430, 170, 470).stroke();
-      doc.rect(415, 440, 150, 450).stroke();
-      drawVertical(doc, `${shiName}族譜`, { rightX: 454, leftX: 382, topY: 520, bottomY: 900, fontSize: 72, color: '#1a0f03' });
-      drawVertical(doc, '世代绵延', { rightX: 478, leftX: 406, topY: 980, bottomY: 1140, fontSize: 24, color: '#3a2410' });
+      // 主框内竖排：家族名(title-name 小) + 族譜(title-word 大)，整体居中于框中央一列
+      const titleText = `${family.family_name || shiName}族譜`;
+      const tFs = boxR - boxL < 230 ? 60 : 66;
+      const stepT = tFs * 1.75;
+      const totalH = Array.from(titleText).length * stepT;
+      // 字左边使列中心 = 框中心
+      const tX = boxCX - tFs / 2;
+      const tTop = (boxT + boxB) / 2 - totalH / 2;
+      doc.lineWidth(2).strokeColor('#111111');
+      doc.rect(boxL, boxT, boxR - boxL, boxB - boxT).stroke();
+      doc.rect(boxL + 10, boxT + 10, boxR - boxL - 20, boxB - boxT - 20).stroke();
+      drawVertical(doc, titleText, { rightX: tX, leftX: boxL, topY: tTop, bottomY: boxB, fontSize: tFs, color: '#111111' });
 
-      // 列3（最左）：纪年
-      drawVertical(doc, `${ganzhi}年重修`, { rightX: 205, leftX: 135, topY: 560, bottomY: 860, fontSize: 28, color: '#2b1a08' });
+      // 右侧堂号 cover-hall：right:12% top:20% → 字左边≈862-42=820，顶部 y=276
+      if (hall) drawVertical(doc, hall, { rightX: 820, leftX: 745, topY: 276, bottomY: 700, fontSize: 42, color: '#111111' });
+
+      // 框左侧上部副文 cover-sub-1 宗族源远：left:34% top:32% → x=333, y=442
+      drawVertical(doc, '宗族源远', { rightX: 333, leftX: 280, topY: 442, bottomY: 660, fontSize: 28, color: '#111111' });
+
+      // 框左侧下部副文 cover-sub-2 世代绵延：left:34% top:62% → x=333, y=856
+      drawVertical(doc, '世代绵延', { rightX: 333, leftX: 280, topY: 856, bottomY: 1080, fontSize: 28, color: '#111111' });
+
+      // 左下重修纪年 cover-date：left:16% bottom:14% → 字左边 x=157，向上排，底缘 y=1187
+      const dateText = `${ganzhi}年重修`;
+      drawVertical(doc, dateText, { rightX: 157, leftX: 80, topY: 1187 - Array.from(dateText).length * 56, bottomY: 1187, fontSize: 32, color: '#111111' });
     }
 
     // ===== 2. 目录 =====

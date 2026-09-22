@@ -351,28 +351,21 @@ const ExportPreviewPage: React.FC = () => {
       </View>
 
       <View className="px-3 py-4 max-w-xl mx-auto">
-        {/* ===== 封面（三列竖排，与打印模板一致） ===== */}
+        {/* ===== 封面（9.21 新模板：竖版单页，中央主框 + 框左上下副文 + 左下纪年 + 框右堂号） ===== */}
         <Sheet>
-          <View className="cover-border flex items-center justify-center" style={{ minHeight: '900rpx' }}>
-            <View className="cover-cols">
-              {/* 列1（最右）：宗譜 + 宗族源远 */}
-              <View className="cover-col">
-                <Text className="cover-top">{family.family_name}宗譜</Text>
-                <Text className="cover-sub">宗族源远</Text>
-              </View>
-              {/* 列2（中）：堂号 + 族譜双线框 + 世代绵延 */}
-              <View className="cover-col">
-                {family.hall_name ? <Text className="cover-hall">{family.hall_name}</Text> : null}
-                <View className="cover-title-box">
-                  <Text className="cover-title">{family.family_name}族譜</Text>
-                </View>
-                <Text className="cover-sub">世代绵延</Text>
-              </View>
-              {/* 列3（最左）：纪年 */}
-              <View className="cover-col">
-                <Text className="cover-date">{yearText}年重修</Text>
-              </View>
+          <View className="cover9 relative" style={{ height: '1180rpx' }}>
+            {/* 中央主标题框：right26% top10% width22% height80% */}
+            <View className="cover9-title-box">
+              <Text className="cover9-title">{`${family.family_name}族譜`}</Text>
             </View>
+            {/* 框右侧堂号 */}
+            {family.hall_name ? <Text className="cover9-hall">{family.hall_name}</Text> : null}
+            {/* 框左侧上部副文 */}
+            <Text className="cover9-sub1">宗族源远</Text>
+            {/* 框左侧下部副文 */}
+            <Text className="cover9-sub2">世代绵延</Text>
+            {/* 左下纪年 */}
+            <Text className="cover9-date">{yearText}年重修</Text>
           </View>
         </Sheet>
 

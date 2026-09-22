@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>【XXXXXX】族谱</title>
+<style>
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  background: #f5efe0;
+}
+
+body,
+button,
+input,
+select,
+textarea,
+div,
+span,
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+li,
+td,
+th {
+  font-family: "STKaiti", "KaiTi", "华文楷体", "楷体", serif !important;
+  color: #1a1a1a;
+}
+
+/* ---------- 导航 ---------- */
+.nav-wrap {
+  width: 980px;
+  margin: 20px auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.nav-wrap button {
+  padding: 7px 14px;
+  border: 1px solid #6b4423;
+  background: #fff8e7;
+  font-size: 16px;
+  cursor: pointer;
+  border-radius: 3px;
+  letter-spacing: 2px;
+}
+
+.nav-wrap button.active {
+  background: #6b4423;
+  color: #fff8e7;
+}
+
+/* ---------- 书本页面纸张容器 ---------- */
+.book-page {
+  width: 980px;
+  height: 1380px;
+  background: #fff8e7;
+  border: 2px solid #000;
+  margin: 0 auto;
+  position: relative;
+  overflow: hidden;
+}
+
+.page {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: none;
+}
+.page.active {
+  display: block;
+}
+
+/* 封面页面：无边距，统一纸张底色 */
+#cover {
+  padding: 0;
+  background-color: #f7eeda;
+}
+
+.cover-inner {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  background-color: #f7eeda;
+}
+
+/* 主标题外框 */
+.cover-title-box {
+  position: absolute;
+  right: 26%;
+  top: 10%;
+  width: 22%;
+  height: 80%;
+  border: 2px solid #111111;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background-color: #f7eeda;
+}
+
+/* 主标题中的六个字家族名，保持不大调 */
+.cover-title-name {
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  font-size: 54px;
+  font-weight: bold;
+  letter-spacing: 14px;
+  color: #111111;
+  line-height: 1.4;
+}
+
+/* 主标题中的“族譜” */
+.cover-title-word {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: 82px;
+  font-weight: bold;
+  color: #111111;
+  margin-top: 18px;
+  letter-spacing: 4px;
+}
+
+/* 右侧堂号：调大 */
+.cover-hall {
+  position: absolute;
+  right: 12%;
+  top: 20%;
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  font-size: 42px;
+  font-weight: bold;
+  letter-spacing: 12px;
+  color: #111111;
+}
+
+/* 左侧上方副文：宗族源远，调大 */
+.cover-sub-1 {
+  position: absolute;
+  left: 34%;
+  top: 32%;
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  font-size: 28px;
+  letter-spacing: 10px;
+  color: #111111;
+}
+
+/* 左侧下方副文：世代绵延，调大 */
+.cover-sub-2 {
+  position: absolute;
+  left: 34%;
+  top: 62%;
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  font-size: 28px;
+  letter-spacing: 10px;
+  color: #111111;
+}
+
+/* 左下重修年份，调大 */
+.cover-date {
+  position: absolute;
+  left: 16%;
+  bottom: 14%;
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  font-size: 32px;
+  letter-spacing: 10px;
+  color: #111111;
+}
+
+/* ==========【除封面外统一页边距】========== */
+.page.with-margin {
+  padding-top: 2cm;
+  padding-bottom: 2cm;
+  padding-left: 2.5cm;
+  padding-right: calc(1cm + 110px);
+}
+
+.page.with-margin#catalog {
+  padding-bottom: calc(2cm + 80px);
+}
+
+/* ---------- 全局右侧侧边栏 ---------- */
+.page-sidebar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 110px;
+  height: 100%;
+  border-left: 2px solid #000;
+  background: #fff8e7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.page-sidebar-text {
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  font-size: 22px;
+  letter-spacing: 10px;
+  line-height: 2.6;
+  text-align: center;
+}
+
+/* ---------- 页面大标题 ---------- */
+.page-hd {
+  font-size: 34px;
+  font-weight: bold;
+  text-align: center;
+  letter-spacing: 10px;
+  margin: 0 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid #9a7b4f;
+}
+
+/* ==========双栏布局 ========== */
+.two-col-wrap {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 0;
+}
+.col-block {
+  display: grid;
+  grid-template-columns: calc(100% - 60px) 60px;
+  gap: 2px;
+}
+.col-text {
+  width: 100%;
+  height: auto;
+  padding: 0;
+}
+.col-vert-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.col-vert-title-text {
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  font-size: 24px;
+  font-weight: bold;
+  letter-spacing: 8px;
+  color: #3a2410;
+}
+
+/* ---------- 竖排正文 ---------- */
+.vertical-text {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  width: 100%;
+  height: auto;
+  letter-spacing: 3px;
+  line-height: 1.75;
+  font-size: 20px;
+  padding: 0;
+}
+
+/* ---------- 总目录 ---------- */
+.catalog-list {
+  font-size: 28px;
+  letter-spacing: 6px;
+  line-height: 2.1;
+  text-align: left;
+}
+.catalog-list p {
+  padding: 4px 0;
+}
+
+/* ---------- 世系表 ---------- */
+.lineage-wrap {
+  width: auto;
+  height: auto;
+}
+.lineage-main {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  height: auto;
+}
+.gen-item {
+  border-bottom: 1px solid #000;
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-start;
+  padding: 7px 12px;
+  gap: 14px;
+  width: 100%;
+}
+.gen-tag {
+  border: 2px solid #000;
+  background: #000;
+  color: #fff;
+  padding: 4px 8px;
+  font-size: 20px;
+  font-weight: bold;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.gen-text {
+  font-size: 20px;
+  line-height: 1.6;
+  flex: 1;
+}
+
+/* ---------- 索引表 ---------- */
+.index-wrap {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+}
+.index-block {
+  margin-bottom: 14px;
+}
+.index-gen {
+  border: 2px solid #2b1a08;
+  text-align: center;
+  font-weight: bold;
+  font-size: 24px;
+  letter-spacing: 4px;
+  margin-bottom: 8px;
+  padding: 6px 0;
+  background: rgba(154,123,79,0.12);
+}
+.index-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 8px;
+  font-size: 20px;
+  border-bottom: 1px dashed #b59565;
+}
+</style>
+</head>
+
+<body>
+<div class="nav-wrap">
+  <button class="active" data-page="cover">族谱封面</button>
+  <button data-page="catalog">总目录</button>
+  <button data-page="history">家族家史</button>
+  <button data-page="motto">家风家训</button>
+  <button data-page="rank">家族字辈</button>
+  <button data-page="event">家族事记</button>
+  <button data-page="index">索引表</button>
+  <button data-page="lineage">世系表</button>
+  <button data-page="postscript">卷末后记</button>
+</div>
+
+<div class="book-page">
+
+  <!--1 封面 -->
+  <div class="page active" id="cover">
+    <div class="cover-inner">
+      <div class="cover-title-box">
+        <div class="cover-title-name" id="coverTitleName"></div>
+        <div class="cover-title-word" id="coverTitleWord"></div>
+      </div>
+      <div class="cover-hall" id="coverHall"></div>
+      <div class="cover-sub-1" id="coverSub1"></div>
+      <div class="cover-sub-2" id="coverSub2"></div>
+      <div class="cover-date" id="coverDate"></div>
+    </div>
+  </div>
+
+  <!--2 总目录 -->
+  <div class="page with-margin" id="catalog">
+    <h2 class="page-hd">目 录</h2>
+    <div class="catalog-list" id="catalogBox"></div>
+    <div class="page-sidebar">
+      <div class="page-sidebar-text" id="sidebarCatalog"></div>
+    </div>
+  </div>
+
+  <!--3 家族家史 -->
+  <div class="page with-margin" id="history">
+    <h2 class="page-hd" id="hdHistory"></h2>
+    <div class="vertical-text" id="txtHistory"></div>
+    <div class="page-sidebar">
+      <div class="page-sidebar-text" id="sidebarHistory"></div>
+    </div>
+  </div>
+
+  <!--4 家风家训 -->
+  <div class="page with-margin" id="motto">
+    <h2 class="page-hd" id="hdMotto"></h2>
+    <div class="two-col-wrap">
+      <div class="col-block">
+        <div class="col-text">
+          <div class="vertical-text" id="txtMottoLeft"></div>
+        </div>
+        <div class="col-vert-title">
+          <div class="col-vert-title-text" id="vertTitleLeft"></div>
+        </div>
+      </div>
+      <div class="col-block">
+        <div class="col-text">
+          <div class="vertical-text" id="txtMottoRight"></div>
+        </div>
+        <div class="col-vert-title">
+          <div class="col-vert-title-text" id="vertTitleRight"></div>
+        </div>
+      </div>
+    </div>
+    <div class="page-sidebar">
+      <div class="page-sidebar-text" id="sidebarMotto"></div>
+    </div>
+  </div>
+
+  <!--5 家族字辈 -->
+  <div class="page with-margin" id="rank">
+    <h2 class="page-hd" id="hdRank"></h2>
+    <div class="vertical-text" id="txtRank"></div>
+    <div class="page-sidebar">
+      <div class="page-sidebar-text" id="sidebarRank"></div>
+    </div>
+  </div>
+
+  <!--6 家族事记 -->
+  <div class="page with-margin" id="event">
+    <h2 class="page-hd" id="hdEvent"></h2>
+    <div class="vertical-text" id="txtEvent"></div>
+    <div class="page-sidebar">
+      <div class="page-sidebar-text" id="sidebarEvent"></div>
+    </div>
+  </div>
+
+  <!--7 索引表 -->
+  <div class="page with-margin" id="index">
+    <h2 class="page-hd" id="hdIndex"></h2>
+    <div class="index-wrap" id="indexBox"></div>
+    <div class="page-sidebar">
+      <div class="page-sidebar-text" id="sidebarIndex"></div>
+    </div>
+  </div>
+
+  <!--8 世系表 -->
+  <div class="page with-margin" id="lineage">
+    <div class="lineage-wrap">
+      <div class="lineage-main" id="lineageBox"></div>
+    </div>
+    <div class="page-sidebar">
+      <div class="page-sidebar-text" id="sidebarLineage"></div>
+    </div>
+  </div>
+
+  <!--9 卷末后记 -->
+  <div class="page with-margin" id="postscript">
+    <h2 class="page-hd" id="hdPostscript"></h2>
+    <div class="two-col-wrap">
+      <div class="col-block">
+        <div class="col-text">
+          <div class="vertical-text" id="txtPsLeft"></div>
+        </div>
+        <div class="col-vert-title">
+          <div class="col-vert-title-text" id="psVertLeft"></div>
+        </div>
+      </div>
+      <div class="col-block">
+        <div class="col-text">
+          <div class="vertical-text" id="txtPsRight"></div>
+        </div>
+        <div class="col-vert-title">
+          <div class="col-vert-title-text" id="psVertRight"></div>
+        </div>
+      </div>
+    </div>
+    <div class="page-sidebar">
+      <div class="page-sidebar-text" id="sidebarPostscript"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const SETTING = {
+  familyName: "XXXXXX",
+  hallName: "同德堂",
+  rebuildYear: "辛巳年重修"
+};
+
+const COVER = {
+  top: SETTING.familyName + "宗譜",
+  sub1: "宗族源远",
+  hall: SETTING.hallName,
+  titleName: SETTING.familyName,
+  titleWord: "族譜",
+  sub2: "世代绵延",
+  date: SETTING.rebuildYear
+};
+
+const SIDEBAR = {
+  catalog: SETTING.familyName + "家族总目录 第二页 " + SETTING.hallName,
+  history: SETTING.familyName + "家族源流家史 第三页 " + SETTING.hallName,
+  motto: SETTING.familyName + "家风家训祖训 第四页 " + SETTING.hallName,
+  rank: SETTING.familyName + "家族字辈排行 第五页 " + SETTING.hallName,
+  event: SETTING.familyName + "家族大事记略 第六页 " + SETTING.hallName,
+  index: SETTING.familyName + "世代人名索引 第七页 " + SETTING.hallName,
+  lineage: SETTING.familyName + "历代世系表 第八页 " + SETTING.hallName,
+  postscript: SETTING.familyName + "卷末编录后记 第九页 " + SETTING.hallName
+};
+
+const PAGE_TITLE = {
+  history: "家族源流家史",
+  motto: "家风家训祖训",
+  rank: "家族字辈排行",
+  event: "家族大事记略",
+  index: "世代人名索引",
+  postscript: "卷末"
+};
+
+const BLOCK_VERT_TITLE = {
+  mottoLeft: "家风",
+  mottoRight: "家训",
+  psLeft: "后记",
+  psRight: "编写说明"
+};
+
+const CATALOG_ITEMS = [
+  "一、家族源流家史",
+  "二、家风家训祖训",
+  "三、家族字辈排行",
+  "四、家族大事记略",
+  "五、世代人名索引",
+  "六、历代世系总图",
+  "七、卷末编录说明与后记"
+];
+
+const TEXT_CONTENT = {
+  history: "",
+  mottoLeft: "",
+  mottoRight: "",
+  rank: "",
+  event: "",
+  psLeft: "",
+  psRight: ""
+};
+
+const lineageData = [
+  { gen: "", text: "" }
+];
+
+const indexData = [
+  { gen: "", names: [], pages: [] }
+];
+
+function renderText() {
+  document.getElementById("coverTitleName").innerText = COVER.titleName;
+  document.getElementById("coverTitleWord").innerText = COVER.titleWord;
+  document.getElementById("coverHall").innerText = COVER.hall;
+  document.getElementById("coverSub1").innerText = COVER.sub1;
+  document.getElementById("coverSub2").innerText = COVER.sub2;
+  document.getElementById("coverDate").innerText = COVER.date;
+
+  document.getElementById("sidebarCatalog").innerText = SIDEBAR.catalog;
+  document.getElementById("sidebarHistory").innerText = SIDEBAR.history;
+  document.getElementById("sidebarMotto").innerText = SIDEBAR.motto;
+  document.getElementById("sidebarRank").innerText = SIDEBAR.rank;
+  document.getElementById("sidebarEvent").innerText = SIDEBAR.event;
+  document.getElementById("sidebarIndex").innerText = SIDEBAR.index;
+  document.getElementById("sidebarLineage").innerText = SIDEBAR.lineage;
+  document.getElementById("sidebarPostscript").innerText = SIDEBAR.postscript;
+
+  document.getElementById("hdHistory").innerText = PAGE_TITLE.history;
+  document.getElementById("hdMotto").innerText = PAGE_TITLE.motto;
+  document.getElementById("hdRank").innerText = PAGE_TITLE.rank;
+  document.getElementById("hdEvent").innerText = PAGE_TITLE.event;
+  document.getElementById("hdIndex").innerText = PAGE_TITLE.index;
+  document.getElementById("hdPostscript").innerText = PAGE_TITLE.postscript;
+
+  document.getElementById("vertTitleLeft").innerText = BLOCK_VERT_TITLE.mottoLeft;
+  document.getElementById("vertTitleRight").innerText = BLOCK_VERT_TITLE.mottoRight;
+  document.getElementById("psVertLeft").innerText = BLOCK_VERT_TITLE.psLeft;
+  document.getElementById("psVertRight").innerText = BLOCK_VERT_TITLE.psRight;
+
+  let catHtml = "";
+  CATALOG_ITEMS.forEach(p => catHtml += `<p>${p}</p>`);
+  document.getElementById("catalogBox").innerHTML = catHtml;
+
+  document.getElementById("txtHistory").innerText = TEXT_CONTENT.history;
+  document.getElementById("txtMottoLeft").innerText = TEXT_CONTENT.mottoLeft;
+  document.getElementById("txtMottoRight").innerText = TEXT_CONTENT.mottoRight;
+  document.getElementById("txtRank").innerText = TEXT_CONTENT.rank;
+  document.getElementById("txtEvent").innerText = TEXT_CONTENT.event;
+  document.getElementById("txtPsLeft").innerText = TEXT_CONTENT.psLeft;
+  document.getElementById("txtPsRight").innerText = TEXT_CONTENT.psRight;
+}
+
+function renderLineage() {
+  let html = "";
+  lineageData.forEach(item => {
+    html += `<div class="gen-item">
+      <div class="gen-tag">${item.gen}</div>
+      <div class="gen-text">${item.text}</div>
+    </div>`;
+  });
+  document.getElementById("lineageBox").innerHTML = html;
+}
+
+function renderIndex() {
+  let col1 = "", col2 = "", col3 = "";
+  indexData.forEach((item, idx) => {
+    let block = `<div class="index-block"><div class="index-gen">${item.gen}</div>`;
+    item.names.forEach((name, i) => {
+      block += `<div class="index-item"><span>${name}</span><span>${item.pages[i] ?? ""}</span></div>`;
+    });
+    block += `</div>`;
+    if (idx % 3 === 0) col1 += block;
+    else if (idx % 3 === 1) col2 += block;
+    else col3 += block;
+  });
+  document.getElementById("indexBox").innerHTML = col1 + col2 + col3;
+}
+
+const btns = document.querySelectorAll(".nav-wrap button");
+const pages = document.querySelectorAll(".page");
+
+btns.forEach(btn => {
+  btn.onclick = () => {
+    let t = btn.dataset.page;
+    btns.forEach(b => b.classList.remove("active"));
+    pages.forEach(p => p.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById(t).classList.add("active");
+  };
+});
+
+window.onload = () => {
+  renderText();
+  renderLineage();
+  renderIndex();
+};
+</script>
+</body>
+</html>
+<!-- （注：内容由AI生成） -->

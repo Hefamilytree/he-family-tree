@@ -130,6 +130,77 @@
   color: #2b1a08;
 }
 
+/* 封面（9.21 新模板：竖版单页，中央主框 + 框左右结构） */
+.cover9 {
+  width: 100%;
+  background-color: #f7eeda;
+  border: 2rpx solid #111;
+  overflow: hidden;
+}
+.cover9-title-box {
+  position: absolute;
+  right: 26%;
+  top: 10%;
+  width: 22%;
+  height: 80%;
+  border: 4rpx double #111;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f7eeda;
+  box-sizing: border-box;
+}
+.cover9-title {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: 40rpx;
+  font-weight: 700;
+  letter-spacing: 8rpx;
+  color: #111;
+  line-height: 1.5;
+}
+.cover9-hall {
+  position: absolute;
+  right: 12%;
+  top: 20%;
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  font-size: 28rpx;
+  font-weight: 700;
+  letter-spacing: 8rpx;
+  color: #111;
+}
+.cover9-sub1 {
+  position: absolute;
+  left: 34%;
+  top: 32%;
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  font-size: 20rpx;
+  letter-spacing: 6rpx;
+  color: #111;
+}
+.cover9-sub2 {
+  position: absolute;
+  left: 34%;
+  top: 62%;
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  font-size: 20rpx;
+  letter-spacing: 6rpx;
+  color: #111;
+}
+.cover9-date {
+  position: absolute;
+  left: 16%;
+  bottom: 14%;
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  font-size: 22rpx;
+  letter-spacing: 6rpx;
+  color: #111;
+}
+
 .cover-seal {
   display: inline-block;
   border: 3rpx solid #8b2500;
