@@ -1,233 +1,233 @@
-import { sql } from "drizzle-orm";
-import { pgTable, varchar, timestamp, integer, text, serial, index } from "drizzle-orm/pg-core";
+import { pgTable, serial, timestamp, uuid, varchar, integer, text, index, foreignKey, unique } from "drizzle-orm/pg-core"
+import { sql } from "drizzle-orm"
+
+
 
 export const healthCheck = pgTable("health_check", {
-  id: serial().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow(),
+	id: serial().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow(),
 });
 
-// 家族信息表
-export const families = pgTable(
-  "families",
-  {
-    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
-    surname: varchar("surname", { length: 50 }).notNull(),
-    family_name: varchar("family_name", { length: 100 }).notNull(),
-    hall_name: varchar("hall_name", { length: 100 }),
-    motto: text("motto"),
-    description: text("description"),
-    origin: text("origin"),
-    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-    updated_at: timestamp("updated_at", { withTimezone: true }),
-  },
-  (table) => [
-    index("families_surname_idx").on(table.surname),
-  ]
-);
+export const kinContacts = pgTable("kin_contacts", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	name: varchar({ length: 64 }).notNull(),
+	phone: varchar({ length: 32 }),
+	residence: varchar({ length: 255 }),
+	generation: integer(),
+	generationTitle: varchar("generation_title", { length: 32 }),
+	bio: text(),
+	source: varchar({ length: 16 }).default('manual').notNull(),
+	createdBy: uuid("created_by"),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+});
 
-// 文化传承内容表（家风家训、家族荣誉、功德贡献、迁徙轨迹、家族事记、人物事记）
-export const cultural_heritage = pgTable(
-  "cultural_heritage",
-  {
-    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
-    family_id: varchar("family_id", { length: 36 }).notNull().references(() => families.id, { onDelete: "cascade" }),
-    category: varchar("category", { length: 50 }).notNull(), // family_motto, honor, merit, migration, family_history, person_history, afterword, editorial_note
-    title: varchar("title", { length: 200 }).notNull(),
-    content: text("content"),
-    sort_order: integer("sort_order").default(0),
-    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-    updated_at: timestamp("updated_at", { withTimezone: true }),
-  },
-  (table) => [
-    index("cultural_heritage_family_id_idx").on(table.family_id),
-    index("cultural_heritage_category_idx").on(table.category),
-  ]
-);
+export const familyApplications = pgTable("family_applications", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	familyId: varchar("family_id", { length: 36 }),
+	applicantId: varchar("applicant_id", { length: 36 }),
+	name: varchar({ length: 64 }).notNull(),
+	generation: varchar({ length: 64 }),
+	generationTitle: varchar("generation_title", { length: 32 }),
+	phone: varchar({ length: 32 }),
+	residence: varchar({ length: 255 }),
+	message: text(),
+	status: varchar({ length: 16 }).default('pending').notNull(),
+	reviewedBy: varchar("reviewed_by", { length: 36 }),
+	reviewedAt: timestamp("reviewed_at", { withTimezone: true, mode: 'string' }),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+});
 
-// 和睦亲族活动表（活动组织、祭祖、成人礼、立贤、敬老、助学、纾困）
-export const harmony_activities = pgTable(
-  "harmony_activities",
-  {
-    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
-    family_id: varchar("family_id", { length: 36 }).notNull().references(() => families.id, { onDelete: "cascade" }),
-    category: varchar("category", { length: 50 }).notNull(), // activity, ancestor_worship, coming_of_age, talent, elderly_care, education, relief
-    title: varchar("title", { length: 200 }).notNull(),
-    content: text("content"),
-    event_date: varchar("event_date", { length: 50 }),
-    location: varchar("location", { length: 200 }),
-    sort_order: integer("sort_order").default(0),
-    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-    updated_at: timestamp("updated_at", { withTimezone: true }),
-  },
-  (table) => [
-    index("harmony_activities_family_id_idx").on(table.family_id),
-    index("harmony_activities_category_idx").on(table.category),
-  ]
-);
+export const families = pgTable("families", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	surname: varchar({ length: 50 }).notNull(),
+	familyName: varchar("family_name", { length: 100 }).notNull(),
+	hallName: varchar("hall_name", { length: 100 }),
+	motto: text(),
+	description: text(),
+	origin: text(),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }),
+}, (table) => [
+	index("families_surname_idx").using("btree", table.surname.asc().nullsLast().op("text_ops")),
+]);
 
-// 发展经济信息表（通讯录、附件宗亲、企业家圈、供需信息、产品展示）
-export const economic_development = pgTable(
-  "economic_development",
-  {
-    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
-    family_id: varchar("family_id", { length: 36 }).notNull().references(() => families.id, { onDelete: "cascade" }),
-    category: varchar("category", { length: 50 }).notNull(), // contact, relative, entrepreneur, supply_demand, product
-    title: varchar("title", { length: 200 }).notNull(),
-    content: text("content"),
-    contact_name: varchar("contact_name", { length: 100 }),
-    contact_phone: varchar("contact_phone", { length: 50 }),
-    member_id: varchar("member_id", { length: 36 }),
-    sort_order: integer("sort_order").default(0),
-    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-    updated_at: timestamp("updated_at", { withTimezone: true }),
-  },
-  (table) => [
-    index("economic_development_family_id_idx").on(table.family_id),
-    index("economic_development_category_idx").on(table.category),
-  ]
-);
-export const members = pgTable(
-  "members",
-  {
-    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
-    family_id: varchar("family_id", { length: 36 }).notNull().references(() => families.id, { onDelete: "cascade" }),
-    name: varchar("name", { length: 100 }).notNull(),
-    gender: varchar("gender", { length: 10 }).notNull().default("male"),
-    birth_date: varchar("birth_date", { length: 20 }),
-    death_date: varchar("death_date", { length: 20 }),
-    parent_id: varchar("parent_id", { length: 36 }),
-    spouse_name: varchar("spouse_name", { length: 100 }),
-    generation: integer("generation").notNull().default(1),
-    generation_title: varchar("generation_title", { length: 100 }),
-    bio: text("bio"),
-    avatar_url: text("avatar_url"),
-    is_alive: varchar("is_alive", { length: 10 }).notNull().default("yes"),
-    birth_place: varchar("birth_place", { length: 200 }),
-    burial_place: varchar("burial_place", { length: 255 }),
-    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-    updated_at: timestamp("updated_at", { withTimezone: true }),
-  },
-  (table) => [
-    index("members_family_id_idx").on(table.family_id),
-    index("members_parent_id_idx").on(table.parent_id),
-    index("members_generation_idx").on(table.generation),
-  ]
-);
+export const members = pgTable("members", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	familyId: varchar("family_id", { length: 36 }).notNull(),
+	name: varchar({ length: 100 }).notNull(),
+	courtesyName: varchar("courtesy_name", { length: 100 }), // 字（表字）
+	gender: varchar({ length: 10 }).default('male').notNull(),
+	birthDate: varchar("birth_date", { length: 20 }),
+	deathDate: varchar("death_date", { length: 20 }),
+	parentId: varchar("parent_id", { length: 36 }),
+	spouseName: varchar("spouse_name", { length: 100 }),
+	generation: integer().default(1).notNull(),
+	bio: text(),
+	avatarUrl: text("avatar_url"),
+	isAlive: varchar("is_alive", { length: 10 }).default('yes').notNull(),
+	birthPlace: varchar("birth_place", { length: 200 }),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }),
+	burialPlace: varchar("burial_place", { length: 200 }).default('葬地不详'),
+	generationTitle: varchar("generation_title", { length: 100 }),
+}, (table) => [
+	index("members_family_id_idx").using("btree", table.familyId.asc().nullsLast().op("text_ops")),
+	index("members_generation_idx").using("btree", table.generation.asc().nullsLast().op("int4_ops")),
+	index("members_parent_id_idx").using("btree", table.parentId.asc().nullsLast().op("text_ops")),
+	foreignKey({
+			columns: [table.familyId],
+			foreignColumns: [families.id],
+			name: "members_family_id_fkey"
+		}).onDelete("cascade"),
+]);
 
-// 用户表
-export const users = pgTable(
-  "users",
-  {
-    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
-    username: varchar("username", { length: 100 }).notNull().unique(),
-    password_hash: varchar("password_hash", { length: 255 }).notNull(),
-    role: varchar("role", { length: 20 }).notNull().default("member"),
-    family_id: varchar("family_id", { length: 36 }).references(() => families.id, { onDelete: "set null" }),
-    nickname: varchar("nickname", { length: 100 }),
-    avatar_url: text("avatar_url"),
-    openid: varchar("openid", { length: 128 }),
-    member_id: varchar("member_id", { length: 36 }).references(() => members.id, { onDelete: "set null" }),
-    phone: varchar("phone", { length: 32 }),
-    residence: varchar("residence", { length: 255 }),
-    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-    updated_at: timestamp("updated_at", { withTimezone: true }),
-  },
-  (table) => [
-    index("users_username_idx").on(table.username),
-    index("users_family_id_idx").on(table.family_id),
-  ]
-);
+export const harmonyActivities = pgTable("harmony_activities", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	familyId: varchar("family_id", { length: 36 }).notNull(),
+	category: varchar({ length: 50 }).notNull(),
+	title: varchar({ length: 200 }).notNull(),
+	content: text(),
+	eventDate: varchar("event_date", { length: 50 }),
+	location: varchar({ length: 200 }),
+	sortOrder: integer("sort_order").default(0),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }),
+	birthdayPerson: varchar("birthday_person", { length: 100 }),
+}, (table) => [
+	index("harmony_activities_category_idx").using("btree", table.category.asc().nullsLast().op("text_ops")),
+	index("harmony_activities_family_id_idx").using("btree", table.familyId.asc().nullsLast().op("text_ops")),
+	foreignKey({
+			columns: [table.familyId],
+			foreignColumns: [families.id],
+			name: "harmony_activities_family_id_fkey"
+		}).onDelete("cascade"),
+]);
 
-// 通讯录/附近宗亲 手动维护联系人表（自动认证条目来自 users 关联 members）
-export const kinContacts = pgTable(
-  "kin_contacts",
-  {
-    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
-    name: varchar("name", { length: 64 }).notNull(),
-    phone: varchar("phone", { length: 32 }),
-    residence: varchar("residence", { length: 255 }),
-    generation: integer("generation"),
-    generation_title: varchar("generation_title", { length: 32 }),
-    bio: text("bio"),
-    source: varchar("source", { length: 16 }).notNull().default("manual"),
-    created_by: varchar("created_by", { length: 36 }),
-    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-    updated_at: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-  }
-);
+export const culturalHeritage = pgTable("cultural_heritage", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	familyId: varchar("family_id", { length: 36 }).notNull(),
+	category: varchar({ length: 50 }).notNull(),
+	title: varchar({ length: 200 }).notNull(),
+	content: text(),
+	sortOrder: integer("sort_order").default(0),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }),
+}, (table) => [
+	index("cultural_heritage_category_idx").using("btree", table.category.asc().nullsLast().op("text_ops")),
+	index("cultural_heritage_family_id_idx").using("btree", table.familyId.asc().nullsLast().op("text_ops")),
+	foreignKey({
+			columns: [table.familyId],
+			foreignColumns: [families.id],
+			name: "cultural_heritage_family_id_fkey"
+		}).onDelete("cascade"),
+]);
 
-// 申请加入家族（需管理员授权）
-export const familyApplications = pgTable(
-  "family_applications",
-  {
-    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
-    family_id: varchar("family_id", { length: 36 }).references(() => families.id, { onDelete: "set null" }),
-    applicant_id: varchar("applicant_id", { length: 36 }).references(() => users.id, { onDelete: "set null" }),
-    name: varchar("name", { length: 64 }).notNull(),
-    generation: varchar("generation", { length: 64 }),
-    generation_title: varchar("generation_title", { length: 32 }),
-    phone: varchar("phone", { length: 32 }),
-    residence: varchar("residence", { length: 255 }),
-    message: text("message"),
-    status: varchar("status", { length: 16 }).notNull().default("pending"),
-    reviewed_by: varchar("reviewed_by", { length: 36 }),
-    reviewed_at: timestamp("reviewed_at", { withTimezone: true }),
-    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-    updated_at: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [
-    index("family_applications_status_idx").on(table.status),
-  ]
-);
+export const users = pgTable("users", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	username: varchar({ length: 100 }).notNull(),
+	passwordHash: varchar("password_hash", { length: 255 }).notNull(),
+	role: varchar({ length: 20 }).default('member').notNull(),
+	familyId: varchar("family_id", { length: 36 }),
+	nickname: varchar({ length: 100 }),
+	avatarUrl: text("avatar_url"),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }),
+	openid: varchar({ length: 128 }),
+	memberId: uuid("member_id"),
+	phone: varchar({ length: 32 }),
+	residence: varchar({ length: 255 }),
+}, (table) => [
+	index("users_family_id_idx").using("btree", table.familyId.asc().nullsLast().op("text_ops")),
+	index("users_username_idx").using("btree", table.username.asc().nullsLast().op("text_ops")),
+	foreignKey({
+			columns: [table.familyId],
+			foreignColumns: [families.id],
+			name: "users_family_id_fkey"
+		}).onDelete("set null"),
+	unique("users_username_key").on(table.username),
+]);
 
-// 评论表
-export const comments = pgTable(
-  "comments",
-  {
-    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
-    target_type: varchar("target_type", { length: 50 }).notNull(),
-    target_id: varchar("target_id", { length: 36 }).notNull(),
-    user_id: varchar("user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
-    content: text("content").notNull(),
-    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [
-    index("comments_target_idx").on(table.target_type, table.target_id),
-  ]
-);
+export const spouses = pgTable("spouses", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	memberId: varchar("member_id", { length: 36 }).notNull(),
+	name: varchar({ length: 100 }).notNull(),
+	status: varchar({ length: 20 }).default('alive').notNull(),
+	birthDate: varchar("birth_date", { length: 20 }),
+	deathDate: varchar("death_date", { length: 20 }),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	bio: text(),
+	burialPlace: varchar("burial_place", { length: 255 }),
+}, (table) => [
+	index("spouses_member_id_idx").using("btree", table.memberId.asc().nullsLast().op("text_ops")),
+	foreignKey({
+			columns: [table.memberId],
+			foreignColumns: [members.id],
+			name: "spouses_member_id_fkey"
+		}).onDelete("cascade"),
+]);
 
-// 报名表
-export const registrations = pgTable(
-  "registrations",
-  {
-    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
-    activity_id: varchar("activity_id", { length: 36 }).notNull().references(() => harmony_activities.id, { onDelete: "cascade" }),
-    user_id: varchar("user_id", { length: 36 }).notNull().references(() => users.id, { onDelete: "cascade" }),
-    member_name: varchar("member_name", { length: 100 }),
-    phone: varchar("phone", { length: 50 }),
-    note: text("note"),
-    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [
-    index("registrations_activity_id_idx").on(table.activity_id),
-  ]
-);
+export const comments = pgTable("comments", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	targetType: varchar("target_type", { length: 50 }).notNull(),
+	targetId: varchar("target_id", { length: 36 }).notNull(),
+	userId: varchar("user_id", { length: 36 }).notNull(),
+	content: text().notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	index("comments_target_idx").using("btree", table.targetType.asc().nullsLast().op("text_ops"), table.targetId.asc().nullsLast().op("text_ops")),
+	foreignKey({
+			columns: [table.userId],
+			foreignColumns: [users.id],
+			name: "comments_user_id_fkey"
+		}).onDelete("cascade"),
+]);
 
-// 配偶表
-export const spouses = pgTable(
-  "spouses",
-  {
-    id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
-    member_id: varchar("member_id", { length: 36 }).notNull().references(() => members.id, { onDelete: "cascade" }),
-    name: varchar("name", { length: 100 }).notNull(),
-    status: varchar("status", { length: 20 }).notNull().default("alive"),
-    birth_date: varchar("birth_date", { length: 20 }),
-    death_date: varchar("death_date", { length: 20 }),
-    bio: text("bio"),
-    burial_place: varchar("burial_place", { length: 255 }),
-    created_at: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  },
-  (table) => [
-    index("spouses_member_id_idx").on(table.member_id),
-  ]
-);
+export const registrations = pgTable("registrations", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	activityId: varchar("activity_id", { length: 36 }).notNull(),
+	userId: varchar("user_id", { length: 36 }).notNull(),
+	memberName: varchar("member_name", { length: 100 }),
+	phone: varchar({ length: 50 }),
+	note: text(),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	index("registrations_activity_id_idx").using("btree", table.activityId.asc().nullsLast().op("text_ops")),
+	foreignKey({
+			columns: [table.activityId],
+			foreignColumns: [harmonyActivities.id],
+			name: "registrations_activity_id_fkey"
+		}).onDelete("cascade"),
+	foreignKey({
+			columns: [table.userId],
+			foreignColumns: [users.id],
+			name: "registrations_user_id_fkey"
+		}).onDelete("cascade"),
+	unique("registrations_activity_id_user_id_key").on(table.activityId, table.userId),
+]);
+
+export const economicDevelopment = pgTable("economic_development", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	familyId: varchar("family_id", { length: 36 }).notNull(),
+	category: varchar({ length: 50 }).notNull(),
+	title: varchar({ length: 200 }).notNull(),
+	content: text(),
+	contactName: varchar("contact_name", { length: 100 }),
+	contactPhone: varchar("contact_phone", { length: 50 }),
+	memberId: varchar("member_id", { length: 36 }),
+	sortOrder: integer("sort_order").default(0),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }),
+	address: varchar({ length: 200 }),
+	note: text(),
+	imageUrl: text("image_url"),
+}, (table) => [
+	index("economic_development_category_idx").using("btree", table.category.asc().nullsLast().op("text_ops")),
+	index("economic_development_family_id_idx").using("btree", table.familyId.asc().nullsLast().op("text_ops")),
+	foreignKey({
+			columns: [table.familyId],
+			foreignColumns: [families.id],
+			name: "economic_development_family_id_fkey"
+		}).onDelete("cascade"),
+]);

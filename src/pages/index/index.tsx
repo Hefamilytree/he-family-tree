@@ -31,7 +31,7 @@ const UNIT_SECTIONS = [
       { key: 'family_style', name: '家风', icon: ScrollText },
       { key: 'family_instruction', name: '家训', icon: Feather },
       { key: 'honor', name: '家族字辈', icon: Award },
-      { key: 'merit', name: '家族源流', icon: Heart },
+      { key: 'merit', name: '家史', icon: Heart },
       { key: 'migration', name: '迁徙轨迹', icon: MapPin },
       { key: 'family_history', name: '家族事记', icon: BookOpen },
       { key: 'person_history', name: '前言', icon: CircleUser },

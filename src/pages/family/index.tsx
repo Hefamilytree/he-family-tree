@@ -45,6 +45,7 @@ export default function FamilyTree() {
   const [family, setFamily] = useState<FamilyInfo | null>(null);
   const [roots, setRoots] = useState<TreeNode[]>([]);
   const [loading, setLoading] = useState(true);
+  const [zoom, setZoom] = useState(1);
 
   const loadData = async () => {
     setLoading(true);
@@ -126,8 +127,8 @@ export default function FamilyTree() {
               </Text>
             )}
             {node.bio ? (
-              <Text className="block text-xs text-center mt-1" style={{ color: '#999' }}>
-                {node.bio.length > 24 ? node.bio.slice(0, 24) + '…' : node.bio}
+              <Text className="block text-xs text-center mt-1" style={{ color: '#666', lineHeight: 1.5 }}>
+                {node.bio}
               </Text>
             ) : null}
             <Text className="block text-xs text-center mt-1" style={{ color: '#B0A090' }}>
@@ -220,11 +221,32 @@ export default function FamilyTree() {
             <Text className="block text-gray-400 text-sm mt-1">请先添加家族成员</Text>
           </View>
         ) : (
-          <ScrollView scrollX className="w-full" enhanced showScrollbar={false}>
-            <View className="tree-canvas" style={{ backgroundColor: '#FFFDF7', border: '1px solid #E8E0D8', borderRadius: '12px', padding: '24px 20px', minWidth: '100%' }}>
-              {roots.map(root => renderNode(root))}
+          <View>
+            {/* 缩放控制栏 */}
+            <View className="flex items-center justify-between mb-2 px-1" style={{ position: 'sticky', top: 0, zIndex: 20, backgroundColor: '#FAF8F5' }}>
+              <Text className="text-xs" style={{ color: '#8B2500' }}>
+                缩小 / 放大查看宗亲树（{Math.round(zoom * 100)}%）
+              </Text>
+              <View className="flex items-center gap-1">
+                <Button size="sm" className="px-2" onClick={() => setZoom(z => Math.max(0.5, +(z - 0.15).toFixed(2)))}>
+                  <Text className="text-xs">−</Text>
+                </Button>
+                <Button size="sm" className="px-2" onClick={() => setZoom(z => Math.min(3, +(z + 0.15).toFixed(2)))}>
+                  <Text className="text-xs">＋</Text>
+                </Button>
+                <Button size="sm" variant="outline" className="px-2" onClick={() => setZoom(1)}>
+                  <Text className="text-xs">复位</Text>
+                </Button>
+              </View>
             </View>
-          </ScrollView>
+            <ScrollView scrollX className="w-full" enhanced showScrollbar={false}>
+              <View style={{ width: `${zoom * 100}%`, transform: `scale(${zoom})`, transformOrigin: 'top left' }}>
+                <View className="tree-canvas" style={{ backgroundColor: '#FFFDF7', border: '1px solid #E8E0D8', borderRadius: '12px', padding: '24px 20px', minWidth: '100%' }}>
+                  {roots.map(root => renderNode(root))}
+                </View>
+              </View>
+            </ScrollView>
+          </View>
         )}
       </View>
     </View>

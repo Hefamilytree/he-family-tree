@@ -23,6 +23,14 @@ export function currentGanZhiYear(): string {
   }
 }
 
+/** 中文方头括号（古籍）转换：将输入的英文/中文小括号转为醒目的方头括号 */
+export function toSquareBrackets(text: string): string {
+  if (!text) return text;
+  return String(text)
+    .replace(/[（(]/g, '【')
+    .replace(/[）)]/g, '】');
+}
+
 export interface VerticalOptions {
   /** 最右列的 x 坐标 */
   rightX: number;
@@ -119,12 +127,15 @@ export function drawSidebar(doc: any, text: string, pageNo: number, hallName?: s
   doc.fontSize(22).fillColor('#3a2410');
   const pageCn = toChineseNumber(pageNo);
   const full = hallName ? `${text} 第${pageCn}页 ${hallName}` : `${text} 第${pageCn}页`;
-  Array.from(full).forEach((ch) => {
+  const chars = Array.from(full);
+  // 自适应步距：文字较长时收紧间距，保证整条侧栏不溢出页面底部（修复侧边栏末尾被截断）
+  const step = Math.min(58, Math.floor((1100 - 60) / Math.max(1, chars.length)));
+  chars.forEach((ch) => {
     if (ch === ' ') {
-      y += 40;
+      y += step * 0.7;
       return;
     }
     doc.text(ch, x, y, { lineBreak: false, characterSpacing: 0 });
-    y += 58;
+    y += step;
   });
 }

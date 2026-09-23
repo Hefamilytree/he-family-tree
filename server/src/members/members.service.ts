@@ -37,7 +37,7 @@ export class MembersService {
     const client = this.getClient();
     const { data, error } = await client
       .from('members')
-      .select('id, family_id, name, gender, birth_date, death_date, parent_id, spouse_name, generation, generation_title, bio, is_alive, birth_place, burial_place, created_at, updated_at')
+      .select('id, family_id, name, courtesy_name, gender, birth_date, death_date, parent_id, spouse_name, generation, generation_title, bio, is_alive, birth_place, burial_place, created_at, updated_at')
       .eq('family_id', familyId)
       .order('generation', { ascending: true })
       .order('name', { ascending: true });
@@ -88,7 +88,7 @@ export class MembersService {
     const client = this.getClient();
     const { data, error } = await client
       .from('members')
-      .select('id, name, gender, generation, generation_title, is_alive, birth_date, death_date, spouse_name, parent_id, burial_place')
+      .select('id, name, courtesy_name, gender, generation, generation_title, is_alive, bio, birth_date, death_date, spouse_name, parent_id, burial_place')
       .eq('family_id', familyId)
       .order('generation', { ascending: true });
     if (error) throw new Error(`查询族谱树失败: ${error.message}`);
@@ -134,6 +134,7 @@ export class MembersService {
 
   async createMember(payload: {
     name: string;
+    courtesy_name?: string | null;
     gender?: string;
     birth_date?: string | null;
     death_date?: string | null;
@@ -161,6 +162,7 @@ export class MembersService {
 
   async updateMember(id: string, payload: {
     name?: string;
+    courtesy_name?: string | null;
     gender?: string;
     birth_date?: string | null;
     death_date?: string | null;

@@ -27,7 +27,7 @@ const CULTURAL_LABEL: Record<string, string> = {
   family_style: '家风',
   family_instruction: '家训',
   honor: '家族字辈',
-  merit: '家族源流',
+  merit: '家史',
   migration: '迁徙轨迹',
   family_history: '家族事记',
   person_history: '前言',

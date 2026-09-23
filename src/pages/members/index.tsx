@@ -37,6 +37,7 @@ function normalizeSpouse(raw: any): Spouse {
 interface Member {
   id: string;
   name: string;
+  courtesy_name: string | null;
   gender: string;
   generation: number;
   generation_title: string | null;
@@ -68,6 +69,7 @@ export default function Members() {
 
   // 表单状态
   const [formName, setFormName] = useState('');
+  const [formCourtesy, setFormCourtesy] = useState('');
   const [formGender, setFormGender] = useState('male');
   const [formGenIndex, setFormGenIndex] = useState(0); // 字辈选项下标（0 起）
   const [formBirthDate, setFormBirthDate] = useState('');
@@ -162,6 +164,7 @@ export default function Members() {
 
   const resetForm = () => {
     setFormName('');
+    setFormCourtesy('');
     setFormGender('male');
     setFormGenIndex(0);
     setFormBirthDate('');
@@ -184,6 +187,7 @@ export default function Members() {
     const options = optionsArg || generationOptions;
     setEditingMember(member);
     setFormName(member.name);
+    setFormCourtesy(member.courtesy_name || '');
     setFormGender(member.gender);
     setFormBirthDate(member.birth_date || '');
     setFormDeathDate(member.death_date || '');
@@ -246,6 +250,7 @@ export default function Members() {
 
       const data: any = {
         name: formName,
+        courtesy_name: formCourtesy || null,
         gender: formGender,
         generation: genNumber,
         generation_title: genTitle,
@@ -388,6 +393,13 @@ export default function Members() {
                 <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>姓名 *</Text>
                 <View className="bg-[#FFFDF7] rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
                   <Input className="w-full bg-transparent" placeholder="请输入姓名" value={formName} onInput={(e) => setFormName(e.detail.value)} />
+                </View>
+              </View>
+
+              <View className="mb-3">
+                <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>字（表字，选填）</Text>
+                <View className="bg-[#FFFDF7] rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
+                  <Input className="w-full bg-transparent" placeholder="请输入字，如：子由" value={formCourtesy} onInput={(e) => setFormCourtesy(e.detail.value)} />
                 </View>
               </View>
 
@@ -627,6 +639,11 @@ export default function Members() {
                       <View className="flex-1">
                         <View className="flex items-center gap-2 mb-1 flex-wrap">
                           <Text className="text-base font-bold" style={{ color: '#333' }}>{member.name}</Text>
+                          {member.courtesy_name ? (
+                            <Text className="text-xs px-2 py-1 rounded" style={{ backgroundColor: '#EFE7DC', color: '#6B5B4F' }}>
+                              字：{member.courtesy_name}
+                            </Text>
+                          ) : null}
                           <Text className="text-xs px-2 py-1 rounded" style={{ backgroundColor: member.gender === 'male' ? '#E3F2FD' : '#FCE4EC', color: member.gender === 'male' ? '#1565C0' : '#C62828' }}>
                             {member.gender === 'male' ? '男' : '女'}
                           </Text>

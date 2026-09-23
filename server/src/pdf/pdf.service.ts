@@ -3,11 +3,12 @@ import { join } from 'path';
 import { existsSync } from 'fs';
 import * as PDFDocument from 'pdfkit';
 import { getSupabaseClient } from '../storage/database/supabase-client';
-import { toLunar, currentGanZhiYear, drawVertical, drawSidebar, toChineseNum } from './pdf.helpers';
+import { toLunar, currentGanZhiYear, drawVertical, drawSidebar, toChineseNum, toSquareBrackets } from './pdf.helpers';
 
 interface RawMember {
   id: string;
   name: string;
+  courtesy_name?: string | null;
   gender: string;
   generation: number;
   generation_title?: string | null;
@@ -100,6 +101,7 @@ export class PdfService {
 
   private memberLine(m: RawMember): string {
     const parts: string[] = [m.name];
+    if (m.courtesy_name) parts.push(`字${m.courtesy_name}`);
     const genTxt = m.generation_title
       ? `第${toChineseNum(m.generation)}世·${m.generation_title}`
       : `第${toChineseNum(m.generation)}世`;
@@ -110,18 +112,6 @@ export class PdfService {
       parts.push(m.death_date ? `卒於${toLunar(m.death_date)}` : '卒失考');
     }
     if (m.burial_place && m.burial_place !== '葬地不详') parts.push(`葬${m.burial_place}`);
-    const spouses = (m.spouses || []).filter((s) => s && s.name);
-    if (spouses.length) {
-      spouses.forEach((s) => {
-        let sp = `配${s.name}`;
-        if (s.status === 'deceased' || s.death_date) {
-          if (s.birth_date) sp += `，生於${toLunar(s.birth_date)}`;
-          if (s.death_date) sp += `，卒於${toLunar(s.death_date)}`;
-        }
-        parts.push(sp);
-      });
-    }
-    if (m.bio) parts.push(m.bio);
     return parts.join('，') + '。';
   }
 
@@ -198,7 +188,7 @@ export class PdfService {
     const verticalText = (text: string, sidebar: string, title?: string) => {
       newPaper(sidebar);
       if (title) pageTitle(title);
-      drawVertical(doc, text, {
+      drawVertical(doc, toSquareBrackets(text), {
         rightX: RIGHT_X,
         leftX: M_LEFT,
         topY: title ? M_TOP + 70 : M_TOP + 10,
@@ -255,11 +245,18 @@ export class PdfService {
       drawVertical(doc, dateText, { rightX: 157, leftX: 80, topY: 1187 - Array.from(dateText).length * 56, bottomY: 1187, fontSize: 32, color: '#111111' });
     }
 
-    // ===== 2. 目录 =====
+    // ===== 2. 前言（封面之后、目录之前） =====
+    {
+      const pre = byCat('preface').map((i) => i.content).filter(Boolean).join('\n')
+        || family.description || family.origin || '';
+      if (pre) verticalText(pre, `${shiName}宗族前言`, '前言');
+    }
+
+    // ===== 3. 目录 =====
     {
       newPaper(`${shiName}家族总目录`);
       pageTitle('目 录');
-      const catalog = ['一、家族源流', '二、家风', '三、家训', '四、家族字辈排行', '五、家族事记', '六、世代人名索引', '七、历代世系总图', '八、卷末编写说明与后记'];
+      const catalog = ['前言', '一、家史', '二、家风', '三、家训', '四、家族字辈', '五、家族事记', '六、历代世系图', '七、世代人名索引', '八、卷末编写说明与后记'];
       doc.fontSize(26).fillColor(INK);
       let y = M_TOP + 100;
       catalog.forEach((c) => {
@@ -268,19 +265,19 @@ export class PdfService {
       });
     }
 
-    // ===== 3. 家族源流（连接主程序家族源流，无需重复设置） =====
+    // ===== 4. 家史（原名“家族源流”，统一改名为“家史”并与小程序“家史”板块对应） =====
     {
       const srcParts: string[] = [];
-      if (family.origin) srcParts.push(family.origin);
-      if (family.description) srcParts.push(family.description);
       ['merit', 'migration'].forEach((cat) => {
         byCat(cat).forEach((i) => srcParts.push(i.content || ''));
       });
+      if (family.origin) srcParts.push(family.origin);
+      if (family.description) srcParts.push(family.description);
       const text = srcParts.filter(Boolean).join('\n\n');
-      if (text) verticalText(text, `${shiName}家族源流`, '家族源流');
+      if (text) verticalText(text, `${shiName}家史`, '家史');
     }
 
-    // ===== 4. 家风 / 家训（两个独立单元，各自连接小程序板块） =====
+    // ===== 5. 家风 / 家训（两栏并列；每栏“标题”置于栏右端（阅读起点）先于内容，且家训栏左侧留白收窄） =====
     {
       const familyStyle = byCat('family_style').concat(byCat('family_motto')).map((i) => i.content).filter(Boolean).join('\n');
       const familyRule = [family.motto, ...byCat('family_instruction').map((i) => i.content).filter(Boolean)]
@@ -299,13 +296,24 @@ export class PdfService {
           doc.lineWidth(2).moveTo(PAGE_W - 110, 0).lineTo(PAGE_W - 110, PAGE_H).stroke();
           drawSidebar(doc, sb, pageNo, hall);
         };
-        // 右栏（家训），左栏（家风）
-        drawVertical(doc, right || '', { rightX: RIGHT_X - 60, leftX: M_LEFT + 250, topY: colTop, bottomY: colBottom, fontSize: 19, onNewPage: onNew(`${shiName}家风家训祖训`) });
-        drawVertical(doc, left || '', { rightX: RIGHT_X - 330, leftX: M_LEFT + 30, topY: colTop, bottomY: colBottom, fontSize: 19, onNewPage: onNew(`${shiName}家风家训祖训`) });
-        // 栏目标签（竖排）
+        // 栏边界：左栏(家风) 130..490；右栏(家训) 510..830（不重叠，家训左侧留白收窄）
+        // 右栏(家训)：rightX=810 leftX=510
+        const ruleRight = RIGHT_X - 60;        // 770
+        // 家训栏左侧：原 M_LEFT+250(=350)，现收窄为 RIGHT_X-300(=530)，让家训文字向左填充减少左侧留白
+        const ruleLeft = RIGHT_X - 300;        // 530
+        // 左栏(家风)
+        const styleRight = RIGHT_X - 370;      // 480
+        const styleLeft = M_LEFT + 30;         // 130
+        // 栏内各自“标题”列：置于栏右端(阅读起点)，先标题后内容
         doc.fontSize(22).fillColor('#3a2410');
+        // 家训 标题：列 830..790（栏最右端顶部）
         drawVertical(doc, '家训', { rightX: RIGHT_X, leftX: RIGHT_X - 40, topY: colTop, bottomY: colTop + 140, fontSize: 22 });
-        drawVertical(doc, '家风', { rightX: M_LEFT + 240, leftX: M_LEFT + 200, topY: colTop, bottomY: colTop + 140, fontSize: 22 });
+        // 家训 内容：列 770..530
+        drawVertical(doc, toSquareBrackets(right) || '', { rightX: ruleRight, leftX: ruleLeft, topY: colTop, bottomY: colBottom, fontSize: 19, onNewPage: onNew(`${shiName}家风家训祖训`) });
+        // 家风 标题：列 490..450（左栏右端，先于其内容 480..130）
+        drawVertical(doc, '家风', { rightX: styleRight + 40, leftX: styleRight, topY: colTop, bottomY: colTop + 140, fontSize: 22 });
+        // 家风 内容：列 480..130
+        drawVertical(doc, toSquareBrackets(left) || '', { rightX: styleRight, leftX: styleLeft, topY: colTop, bottomY: colBottom, fontSize: 19, onNewPage: onNew(`${shiName}家风家训祖训`) });
       }
     }
 
@@ -339,20 +347,74 @@ export class PdfService {
       if (text) verticalText(text, `${shiName}家族事记`, '家族事记');
     }
 
-    // ===== 7. 世代人名索引（两列，按世分组；人名后标注其所在“历代世系表”的相对页，使用阿拉伯数字） =====
+    // ===== 7. 历代世系图（先完整显示成员信息，再另行逐行显示每位配偶的完整信息；配偶单独一行并带“续”标识：健在/故/续/离异；置于人名索引之前） =====
     {
-      // 先模拟历代世系表分页：记录每个成员所在世系表相对页（第1页起），与第8节排版规则一致
+      if (members.length) {
+        newPaper(`${shiName}历代世系图`);
+        pageTitle('历代世系图');
+        let y = M_TOP + 80;
+        const lineX = M_LEFT;
+        const textX = M_LEFT + 92;
+        const sepX = M_LEFT + 78;
+        const maxW = RIGHT_X - textX;
+        doc.fontSize(20);
+        const spStatus = (s: any) => {
+          const st = String(s.status || '').toLowerCase();
+          if (['deceased', '故', '殁', '已故'].includes(st)) return '故';
+          if (['divorced', '离异', '离'].includes(st)) return '离异';
+          if (['alive', '健在', '在世'].includes(st)) return '健在';
+          return '续';
+        };
+        members.forEach((m) => {
+          const rows: string[] = [toSquareBrackets(this.memberLine(m))];
+          // 配偶信息：每位配偶单独一行（普通成员行的 1.6 行高，顶部标注“配偶”）
+          (m.spouses && m.spouses.length ? m.spouses : []).forEach((sp) => {
+            const parts = [`配偶${sp.name}`, `（${spStatus(sp)}）`];
+            if (sp.birth_date) parts.push(`生於${toLunar(sp.birth_date)}`);
+            if (sp.death_date && sp.status) parts.push(`卒於${toLunar(sp.death_date)}`);
+            if (sp.burial_place && sp.burial_place !== '葬地不详') parts.push(`葬${sp.burial_place}`);
+            if (sp.bio) parts.push(toSquareBrackets(sp.bio));
+            rows.push(toSquareBrackets(parts.join('，') + '。'));
+          });
+          rows.forEach((row, ri) => {
+            const h = Math.max(56, doc.heightOfString(row, { width: maxW }) + 24);
+            if (y + h > BOTTOM_Y) {
+              newPaper(`${shiName}历代世系表`);
+              pageTitle('历代世系图');
+              y = M_TOP + 80;
+            }
+            if (ri === 0) {
+              // 黑底世数标签
+              doc.rect(lineX, y + 4, 76, 38).fill(INK);
+              doc.fillColor('#fff').fontSize(19).text(`第${toChineseNum(m.generation)}世`, lineX, y + 11, { width: 76, align: 'center' });
+              doc.fillColor(INK).fontSize(20);
+            } else {
+              // 配偶行：缩进标识
+              doc.fillColor(BROWN).fontSize(20).text('配偶', sepX - 60, y, { lineBreak: false });
+              doc.fillColor(INK).fontSize(20);
+            }
+            doc.text(row, textX, y, { width: maxW });
+            doc.fillColor(INK);
+            doc.moveTo(lineX, y + h - 4).lineTo(RIGHT_X, y + h - 4).lineWidth(1).strokeColor(INK).stroke();
+            y += h;
+          });
+        });
+      }
+    }
+
+    // ===== 8. 世代人名索引（三列；第N世黑色条目高度紧凑；人名与页码两端对齐，中间以……点线相连） =====
+    {
+      // 先模拟历代世系图分页，记录每个成员所在相对页（第1页起），与第7节排版规则一致
       const pageOf = new Map<string, number>();
       {
         let _y = M_TOP + 80;
         let _pg = 1;
-        const _lineX = M_LEFT;
         const _textX = M_LEFT + 92;
         const _maxW = RIGHT_X - _textX;
         doc.fontSize(20);
         members.forEach((m) => {
-          const line = this.memberLine(m);
-          const h = Math.max(56, doc.heightOfString(line, { width: _maxW }) + 24);
+          const base = this.memberLine(m);
+          const h = Math.max(56, doc.heightOfString(base, { width: _maxW }) + 24);
           if (_y + h > BOTTOM_Y) {
             _pg += 1;
             _y = M_TOP + 80;
@@ -370,63 +432,48 @@ export class PdfService {
         newPaper(`${shiName}世代人名索引`);
         pageTitle('世代人名索引');
         const groups = Array.from(genMap.keys()).sort((a, b) => a - b);
-        const colW = (RIGHT_X - M_LEFT) / 2;
+        // 三列布局
+        const gap = 40;
+        const colW = (RIGHT_X - M_LEFT - gap * 2) / 3;
         const drawGroup = (gen: number, names: string[], x: number, startY: number): number => {
           let y = startY;
+          // 第N世 黑色条目（高度紧凑：原48 → 16）
           doc.lineWidth(2).strokeColor('#2b1a08');
-          doc.rect(x, y, colW - 24, 48).fillAndStroke('rgba(154,123,79,0.12)', '#2b1a08');
-          doc.fillColor(INK).fontSize(22).text(`第${toChineseNum(gen)}世`, x, y + 9, { width: colW - 24, align: 'center', characterSpacing: 4 });
-          y += 48;
-          doc.fontSize(19);
+          doc.rect(x, y, colW - 8, 16).fillAndStroke('rgba(154,123,79,0.2)', '#2b1a08');
+          doc.fillColor('#fff').fontSize(15).text(`第${toChineseNum(gen)}世`, x, y + 1, { width: colW - 8, align: 'center', characterSpacing: 2 });
+          y += 22;
+          doc.fontSize(18);
           names.forEach((n) => {
             const m = members.find((mm) => mm.name === n && mm.generation === gen);
             const relPage = m ? pageOf.get(m.id) : undefined;
-            // 人名 + 阿拉伯数字相对页（如 “何氏族谱 3”）；页号指向该成员在“历代世系表”中的位置
-            doc.text(`${n}，${relPage ?? '—'}`, x + 12, y, { lineBreak: false, characterSpacing: 2 });
-            doc.moveTo(x + 10, y + 30).lineTo(x + colW - 34, y + 30).dash(2, 2).strokeColor('#b59565').stroke();
+            const pageTxt = String(relPage ?? '—');
+            doc.fillColor(INK);
+            // 人名靠左
+            doc.text(n, x + 2, y, { lineBreak: false, characterSpacing: 1 });
+            const nameW = doc.widthOfString(n, { fontSize: 18, characterSpacing: 1 });
+            const pageW = doc.widthOfString(pageTxt, { fontSize: 18 });
+            const dotX = x + 4 + nameW + 4;
+            const dotEnd = x + colW - 14 - pageW;
+            // 中间 “……” 点线相连
+            if (dotEnd > dotX) {
+              const dots = '…'.repeat(Math.max(1, Math.round((dotEnd - dotX) / 18)));
+              doc.text(dots, dotX, y, { lineBreak: false, fontSize: 16 });
+            }
+            // 页码靠右（两端对齐）
+            doc.text(pageTxt, x + colW - 12 - pageW, y, { lineBreak: false });
+            doc.moveTo(x + 4, y + 24).lineTo(x + colW - 12, y + 24).dash(2, 2).strokeColor('#b59565').stroke();
             doc.undash();
-            y += 34;
+            y += 28;
           });
-          return y + 16;
+          return y + 12;
         };
-        // 简单两列平衡：按组数量对半
-        const half = Math.ceil(groups.length / 2);
-        let yL = M_TOP + 80;
-        let yR = M_TOP + 80;
-        groups.forEach((g, idx) => {
-          const isLeft = idx < half;
-          const x = isLeft ? M_LEFT : M_LEFT + colW;
-          if (isLeft) yL = drawGroup(g, genMap.get(g)!, x, yL);
-          else yR = drawGroup(g, genMap.get(g)!, x, yR);
-        });
-      }
-    }
-
-    // ===== 8. 历代世系表（横排，黑底世数标签） =====
-    {
-      if (members.length) {
-        newPaper(`${shiName}历代世系表`);
-        pageTitle('历代世系图');
-        let y = M_TOP + 80;
-        const lineX = M_LEFT;
-        const textX = M_LEFT + 92;
-        const maxW = RIGHT_X - textX;
-        doc.fontSize(20);
-        members.forEach((m) => {
-          const line = this.memberLine(m);
-          const h = Math.max(56, doc.heightOfString(line, { width: maxW }) + 24);
-          if (y + h > BOTTOM_Y) {
-            newPaper(`${shiName}历代世系表`);
-            pageTitle('历代世系图');
-            y = M_TOP + 80;
-          }
-          // 黑底世数标签
-          doc.rect(lineX, y + 4, 76, 38).fill(INK);
-          doc.fillColor('#fff').fontSize(19).text(`第${toChineseNum(m.generation)}世`, lineX, y + 11, { width: 76, align: 'center' });
-          doc.fillColor(INK).fontSize(20);
-          doc.text(line, textX, y, { width: maxW });
-          doc.moveTo(lineX, y + h - 4).lineTo(RIGHT_X, y + h - 4).lineWidth(1).strokeColor(INK).stroke();
-          y += h;
+        // 三列等分，纵向各自独立排布
+        const baseY = M_TOP + 80;
+        const ys = [baseY, baseY, baseY];
+        groups.forEach((g, i) => {
+          const ci = i % 3;
+          const x = M_LEFT + ci * (colW + gap);
+          ys[ci] = drawGroup(g, genMap.get(g)!, x, ys[ci]);
         });
       }
     }
@@ -446,11 +493,12 @@ export class PdfService {
           doc.lineWidth(2).moveTo(PAGE_W - 110, 0).lineTo(PAGE_W - 110, PAGE_H).stroke();
           drawSidebar(doc, sb, pageNo, hall);
         };
-        drawVertical(doc, note, { rightX: RIGHT_X - 60, leftX: M_LEFT + 250, topY: colTop, bottomY: BOTTOM_Y, fontSize: 19, onNewPage: onNew(`${shiName}卷末编录后记`) });
-        drawVertical(doc, ps, { rightX: RIGHT_X - 330, leftX: M_LEFT + 30, topY: colTop, bottomY: BOTTOM_Y, fontSize: 19, onNewPage: onNew(`${shiName}卷末编录后记`) });
+        drawVertical(doc, toSquareBrackets(note), { rightX: RIGHT_X - 60, leftX: M_LEFT + 250, topY: colTop, bottomY: BOTTOM_Y, fontSize: 19, onNewPage: onNew(`${shiName}卷末编录后记`) });
+        drawVertical(doc, toSquareBrackets(ps), { rightX: RIGHT_X - 330, leftX: M_LEFT + 30, topY: colTop, bottomY: BOTTOM_Y, fontSize: 19, onNewPage: onNew(`${shiName}卷末编录后记`) });
         doc.fontSize(22).fillColor('#3a2410');
-        drawVertical(doc, '编写说明', { rightX: RIGHT_X, leftX: RIGHT_X - 40, topY: colTop, bottomY: colTop + 200, fontSize: 22 });
-        drawVertical(doc, '后记', { rightX: M_LEFT + 240, leftX: M_LEFT + 200, topY: colTop, bottomY: colTop + 140, fontSize: 22 });
+        drawVertical(doc, '编写说明', { rightX: RIGHT_X, leftX: RIGHT_X - 44, topY: colTop, bottomY: colTop + 200, fontSize: 22 });
+        // 后记标题置于左栏右端（阅读起点），先标题后内容
+        drawVertical(doc, '后记', { rightX: RIGHT_X - 330, leftX: RIGHT_X - 370, topY: colTop, bottomY: colTop + 140, fontSize: 22 });
       }
     }
 

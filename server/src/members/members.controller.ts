@@ -30,6 +30,7 @@ export class MembersController {
   @HttpCode(200)
   async createMember(@Body() body: {
     name: string;
+    courtesy_name?: string | null;
     gender?: string;
     birth_date?: string | null;
     death_date?: string | null;
@@ -50,6 +51,7 @@ export class MembersController {
   @HttpCode(200)
   async updateMember(@Param('id') id: string, @Body() body: {
     name?: string;
+    courtesy_name?: string | null;
     gender?: string;
     birth_date?: string | null;
     death_date?: string | null;

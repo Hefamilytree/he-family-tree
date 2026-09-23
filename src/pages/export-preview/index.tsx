@@ -29,6 +29,7 @@ interface Spouse {
 interface Member {
   id: string;
   name: string;
+  courtesy_name?: string;
   username?: string;
   gender: 'male' | 'female';
   is_alive: 'yes' | 'no';
@@ -54,6 +55,9 @@ interface Section {
 }
 
 const isMiniApp = ['WEAPP', 'TT'].includes(Taro.getEnv() as any);
+
+/** 输入的中英文小括号 → 方头括号（古籍排版） */
+const toBox = (s?: string | null) => (s ? String(s).replace(/[（(]/g, '【').replace(/[）)]/g, '】') : '');
 
 const ExportPreviewPage: React.FC = () => {
   const router = useRouter();
@@ -199,11 +203,11 @@ const ExportPreviewPage: React.FC = () => {
   const yearText = new Date().getFullYear();
   const bodyCount = members.length;
 
-  // 生成竖排列
+  // 生成竖排列（内容自动转换为方头括号）
   const vText = (label: string, value: string) => (
     <Text className="v-col">
       <Text className="v-col-label">{label}</Text>
-      {value}
+      {toBox(value)}
     </Text>
   );
 
@@ -369,12 +373,21 @@ const ExportPreviewPage: React.FC = () => {
           </View>
         </Sheet>
 
+        {/* ===== 前言（封面之后、目录之前） ===== */}
+        <Sheet sidebar={sidebarText}>
+          <Text className="v-title block mb-4" style={{ fontSize: '38rpx' }}>前言</Text>
+          <View className="v-columns">
+            {vText('前言', family.description || '（待补录）')}
+          </View>
+        </Sheet>
+
         {/* ===== 目录 ===== */}
         <Sheet sidebar={sidebarText}>
           <Text className="v-title block mb-4" style={{ fontSize: '40rpx' }}>目录</Text>
           <View className="v-columns">
+            <Text className="v-col">前言</Text>
             <Text className="v-col" style={{ color: '#8b2500' }}>卷首</Text>
-            <Text className="v-col">一、家族源流</Text>
+            <Text className="v-col">一、家史</Text>
             <Text className="v-col">二、家训家风</Text>
             <Text className="v-col">三、字辈谱</Text>
             <Text className="v-col">四、家族事记</Text>
@@ -387,15 +400,26 @@ const ExportPreviewPage: React.FC = () => {
           </View>
         </Sheet>
 
-        {/* ===== 卷首：源流 / 家训 ===== */}
+        {/* ===== 家史（原“家族源流”） ===== */}
         <Sheet sidebar={sidebarText}>
-          <Text className="v-title block mb-4" style={{ fontSize: '38rpx' }}>卷首</Text>
+          <Text className="v-title block mb-4" style={{ fontSize: '38rpx' }}>家史</Text>
           <View className="v-columns">
-            {vText('家族源流', family.description || '（待补录）')}
-            {family.motto ? vText('家训', family.motto) : null}
-            {frontSections.filter((s) => s.category === 'family_motto' || s.category === 'merit').map((s) => (
-              vText(s.title, s.content)
+            {(() => {
+              const hist = frontSections.filter((s) => s.category === 'merit' || s.category === 'family_history');
+              if (hist.length) return hist.map((s) => vText(s.title || '家史', s.content));
+              return vText('家史', family.description || '（待补录）');
+            })()}
+          </View>
+        </Sheet>
+
+        {/* ===== 家训家风 ===== */}
+        <Sheet sidebar={sidebarText}>
+          <Text className="v-title block mb-4" style={{ fontSize: '38rpx' }}>家训家风</Text>
+          <View className="v-columns">
+            {frontSections.filter((s) => s.category === 'family_motto' || s.category === 'family_style').map((s) => (
+              vText(s.title || '家风', s.content)
             ))}
+            {family.motto ? vText('家训', family.motto) : null}
           </View>
         </Sheet>
 
@@ -439,22 +463,26 @@ const ExportPreviewPage: React.FC = () => {
                   ? '健在'
                   : m.death_date ? toLunarBirth(m.death_date) : '卒失考';
                 const title = m.generation_title || '';
+                const spLabel = (st?: string) => {
+                  const s = String(st || '').toLowerCase();
+                  if (['deceased', '故', '殁'].includes(s)) return '故';
+                  if (['divorced', '离异', '离'].includes(s)) return '离异';
+                  if (['alive', '健在'].includes(s) || !s) return '健在';
+                  return '续';
+                };
                 return (
                   <View key={m.id} className="v-entry">
                     <Text className="v-col" style={{ fontWeight: '700', color: '#2b1d14' }}>
-                      {title ? `${title} · ` : ''}{m.name}{m.gender === 'female' ? '（女）' : ''}
+                      {title ? `${title} · ` : ''}{m.name}{m.courtesy_name ? ` 字${m.courtesy_name}` : ''}{m.gender === 'female' ? '（女）' : ''}
                     </Text>
                     {vText('生卒', `${birth} 至 ${death}`)}
                     {m.is_alive === 'no' && m.burial_place ? vText('葬地', m.burial_place) : null}
                     {(m.spouses && m.spouses.length > 0) ? m.spouses.map((sp, si) => (
                       <Text key={sp.id || si} className="v-col">
-                        <Text className="v-col-label">配</Text>
-                        {sp.name}{sp.status === 'deceased' ? '（故）' : sp.status === 'divorced' ? '（离异）' : ''}
-                        {sp.birth_date ? ` ${toLunarBirth(sp.birth_date)}` : ''}
-                        {sp.status === 'deceased' && sp.death_date ? ` 至 ${toLunarBirth(sp.death_date)}` : ''}
-                        {sp.status === 'deceased' && sp.burial_place ? ` 葬${sp.burial_place}` : ''}
+                        <Text className="v-col-label">配偶</Text>
+                        {sp.name}（{spLabel(sp.status)}）{sp.birth_date ? ` ${toLunarBirth(sp.birth_date)}` : ''}{sp.status && ['deceased', '故'].includes(String(sp.status).toLowerCase()) && sp.death_date ? ` 至 ${toLunarBirth(sp.death_date)}` : ''}
                       </Text>
-                    )) : m.spouse_name ? vText('配', m.spouse_name) : null}
+                    )) : m.spouse_name ? vText('配偶', `${m.spouse_name}（健在）`) : null}
                     {m.birth_place ? vText('出生地', m.birth_place) : null}
                     {m.bio ? vText('简介', m.bio) : null}
                   </View>
