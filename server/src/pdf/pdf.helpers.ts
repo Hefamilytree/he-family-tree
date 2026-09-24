@@ -23,12 +23,14 @@ export function currentGanZhiYear(): string {
   }
 }
 
-/** 中文方头括号（古籍）转换：将输入的英文/中文小括号转为醒目的方头括号 */
+/** 古籍标点转换：输入的中英文小括号（）转为方头括号 ︻  ︼；《》书名号转为 ﹏ 标记 */
 export function toSquareBrackets(text: string): string {
   if (!text) return text;
   return String(text)
-    .replace(/[（(]/g, '【')
-    .replace(/[）)]/g, '】');
+    .replace(/[（(]/g, '︻')
+    .replace(/[）)]/g, '︼')
+    .replace(/《/g, '﹏')
+    .replace(/》/g, '﹏');
 }
 
 export interface VerticalOptions {

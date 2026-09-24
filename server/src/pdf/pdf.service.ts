@@ -124,7 +124,8 @@ export class PdfService {
   }): Promise<PDFKit.PDFDocument> {
     // ---------- 数据 ----------
     const [famRes, memRes, culRes, spoRes] = await Promise.all([
-      this.supabase.from('families').select('*').order('created_at', { ascending: true }),
+      // 与 /api/family 前端当前家族一致：取最新创建的家族，避免打印出旧/演示家族（如张氏百忍堂）
+      this.supabase.from('families').select('*').order('created_at', { ascending: false }).limit(1),
       this.supabase.from('members').select('*').order('generation', { ascending: true }),
       this.supabase.from('cultural_heritage').select('*').order('sort_order', { ascending: true }),
       this.supabase.from('spouses').select('*'),
@@ -256,7 +257,28 @@ export class PdfService {
     {
       newPaper(`${shiName}家族总目录`);
       pageTitle('目 录');
-      const catalog = ['前言', '一、家史', '二、家风', '三、家训', '四、家族字辈', '五、家族事记', '六、历代世系图', '七、世代人名索引', '八、卷末编写说明与后记'];
+      // 目录与正文顺序保持一致：封面→前言→目录→家史→家风家训→字辈→事记→索引→宗亲树→世系→卷末→编写说明→后记；无内容板块自动跳过
+      const hasSec: Record<string, boolean> = {
+        preface: byCat('preface').some((i) => i.content) || !!family.description || !!family.origin,
+        history: ['merit', 'migration'].some((c) => byCat(c).some((i) => i.content)) || !!family.origin || !!family.description,
+        style: byCat('family_style').concat(byCat('family_motto')).some((i) => i.content),
+        rule: [family.motto, ...byCat('family_instruction').map((i) => i.content), ...byCat('family_motto').map((i) => i.content)].some((v) => !!v),
+        rank: byCat('honor').some((i) => i.content) || members.some((m) => m.generation_title),
+        event: ['family_history', 'person_history', 'event'].some((c) => byCat(c).some((i) => i.content)),
+        index: members.length > 0,
+        tree: members.length > 0,
+        shixi: members.length > 0,
+        volEnd: byCat('editorial_note').some((i) => i.content) || byCat('afterword').some((i) => i.content),
+        note: byCat('editorial_note').some((i) => i.content),
+        afterword: byCat('afterword').some((i) => i.content),
+      };
+      const names: [string, string][] = [
+        ['前言', 'preface'], ['一、家史', 'history'], ['二、家风', 'style'], ['三、家训', 'rule'],
+        ['四、家族字辈', 'rank'], ['五、家族事记', 'event'], ['六、世代人名索引', 'index'],
+        ['七、宗亲树', 'tree'], ['八、历代世系图', 'shixi'], ['九、卷末', 'volEnd'],
+        ['十、编写说明', 'note'], ['十一、后记', 'afterword'],
+      ];
+      const catalog = names.filter(([, k]) => hasSec[k]).map(([t]) => t);
       doc.fontSize(26).fillColor(INK);
       let y = M_TOP + 100;
       catalog.forEach((c) => {
@@ -347,60 +369,8 @@ export class PdfService {
       if (text) verticalText(text, `${shiName}家族事记`, '家族事记');
     }
 
-    // ===== 7. 历代世系图（先完整显示成员信息，再另行逐行显示每位配偶的完整信息；配偶单独一行并带“续”标识：健在/故/续/离异；置于人名索引之前） =====
-    {
-      if (members.length) {
-        newPaper(`${shiName}历代世系图`);
-        pageTitle('历代世系图');
-        let y = M_TOP + 80;
-        const lineX = M_LEFT;
-        const textX = M_LEFT + 92;
-        const sepX = M_LEFT + 78;
-        const maxW = RIGHT_X - textX;
-        doc.fontSize(20);
-        const spStatus = (s: any) => {
-          const st = String(s.status || '').toLowerCase();
-          if (['deceased', '故', '殁', '已故'].includes(st)) return '故';
-          if (['divorced', '离异', '离'].includes(st)) return '离异';
-          if (['alive', '健在', '在世'].includes(st)) return '健在';
-          return '续';
-        };
-        members.forEach((m) => {
-          const rows: string[] = [toSquareBrackets(this.memberLine(m))];
-          // 配偶信息：每位配偶单独一行（普通成员行的 1.6 行高，顶部标注“配偶”）
-          (m.spouses && m.spouses.length ? m.spouses : []).forEach((sp) => {
-            const parts = [`配偶${sp.name}`, `（${spStatus(sp)}）`];
-            if (sp.birth_date) parts.push(`生於${toLunar(sp.birth_date)}`);
-            if (sp.death_date && sp.status) parts.push(`卒於${toLunar(sp.death_date)}`);
-            if (sp.burial_place && sp.burial_place !== '葬地不详') parts.push(`葬${sp.burial_place}`);
-            if (sp.bio) parts.push(toSquareBrackets(sp.bio));
-            rows.push(toSquareBrackets(parts.join('，') + '。'));
-          });
-          rows.forEach((row, ri) => {
-            const h = Math.max(56, doc.heightOfString(row, { width: maxW }) + 24);
-            if (y + h > BOTTOM_Y) {
-              newPaper(`${shiName}历代世系表`);
-              pageTitle('历代世系图');
-              y = M_TOP + 80;
-            }
-            if (ri === 0) {
-              // 黑底世数标签
-              doc.rect(lineX, y + 4, 76, 38).fill(INK);
-              doc.fillColor('#fff').fontSize(19).text(`第${toChineseNum(m.generation)}世`, lineX, y + 11, { width: 76, align: 'center' });
-              doc.fillColor(INK).fontSize(20);
-            } else {
-              // 配偶行：缩进标识
-              doc.fillColor(BROWN).fontSize(20).text('配偶', sepX - 60, y, { lineBreak: false });
-              doc.fillColor(INK).fontSize(20);
-            }
-            doc.text(row, textX, y, { width: maxW });
-            doc.fillColor(INK);
-            doc.moveTo(lineX, y + h - 4).lineTo(RIGHT_X, y + h - 4).lineWidth(1).strokeColor(INK).stroke();
-            y += h;
-          });
-        });
-      }
-    }
+    // ===== 7. 世代人名索引 / 8. 宗亲树 / 9. 历代世系图（见下方：索引→宗亲树→世系） =====
+    { /* 历代世系图已下沉到“世代人名索引”与“宗亲树”之后打印 */ }
 
     // ===== 8. 世代人名索引（三列；第N世黑色条目高度紧凑；人名与页码两端对齐，中间以……点线相连） =====
     {
@@ -478,27 +448,115 @@ export class PdfService {
       }
     }
 
-    // ===== 9. 卷末后记（后记 / 编写说明 两栏） =====
+    // ===== 8. 宗亲树（世代人物总览，置于人名索引之后、历代世系图之前） =====
+    {
+      if (members.length) {
+        newPaper(`${shiName}宗亲树`);
+        pageTitle('宗亲树');
+        const childrenOf = new Map<string, RawMember[]>();
+        members.forEach((m) => {
+          if (!m.parent_id) return;
+          if (!childrenOf.has(m.parent_id)) childrenOf.set(m.parent_id, []);
+          childrenOf.get(m.parent_id)!.push(m);
+        });
+        const roots = members.filter((m) => !m.parent_id || !members.some((x) => x.id === m.parent_id));
+        let y = M_TOP + 90;
+        const maxW = RIGHT_X - M_LEFT;
+        const lines: string[] = [];
+        const renderNode = (m: RawMember, depth: number) => {
+          lines.push(`${'　'.repeat(depth)}第${toChineseNum(m.generation)}世 ${m.name}${m.courtesy_name ? '，字' + m.courtesy_name : ''}`);
+          (childrenOf.get(m.id) || []).forEach((k) => renderNode(k, depth + 1));
+        };
+        roots.forEach((r) => renderNode(r, 0));
+        lines.forEach((ln) => {
+          const h = Math.max(30, doc.heightOfString(ln, { width: maxW }) + 12);
+          if (y + h > BOTTOM_Y) {
+            newPaper(`${shiName}宗亲树`);
+            pageTitle('宗亲树');
+            y = M_TOP + 90;
+          }
+          doc.fontSize(20).fillColor(INK).text(ln, M_LEFT + 6, y, { width: maxW });
+          y += h;
+        });
+      }
+    }
+
+    // ===== 9. 历代世系图（先完整成员信息并含简介，再另行逐行显示每位配偶完整信息；配偶单独一行并带“续”标识：健在/故/续/离异） =====
+    {
+      if (members.length) {
+        newPaper(`${shiName}历代世系图`);
+        pageTitle('历代世系图');
+        let y = M_TOP + 80;
+        const lineX = M_LEFT;
+        const textX = M_LEFT + 92;
+        const sepX = M_LEFT + 78;
+        const maxW = RIGHT_X - textX;
+        doc.fontSize(20);
+        const spStatus = (s: any) => {
+          const st = String(s.status || '').toLowerCase();
+          if (['deceased', '故', '殁', '已故'].includes(st)) return '故';
+          if (['divorced', '离异', '离'].includes(st)) return '离异';
+          if (['alive', '健在', '在世'].includes(st)) return '健在';
+          return '续';
+        };
+        members.forEach((m) => {
+          const base = toSquareBrackets(this.memberLine(m));
+          const bioPart = m.bio && m.bio.trim() ? `　简介：${toSquareBrackets(m.bio.trim())}` : '';
+          const rows: string[] = [base + bioPart];
+          (m.spouses && m.spouses.length ? m.spouses : []).forEach((sp) => {
+            const parts = [`配偶${sp.name}`, `（${spStatus(sp)}）`];
+            if (sp.birth_date) parts.push(`生於${toLunar(sp.birth_date)}`);
+            if (sp.death_date && sp.status) parts.push(`卒於${toLunar(sp.death_date)}`);
+            if (sp.burial_place && sp.burial_place !== '葬地不详') parts.push(`葬${sp.burial_place}`);
+            if (sp.bio) parts.push(toSquareBrackets(sp.bio));
+            rows.push(toSquareBrackets(parts.join('，') + '。'));
+          });
+          rows.forEach((row, ri) => {
+            const h = Math.max(56, doc.heightOfString(row, { width: maxW }) + 24);
+            if (y + h > BOTTOM_Y) {
+              newPaper(`${shiName}历代世系图`);
+              pageTitle('历代世系图');
+              y = M_TOP + 80;
+            }
+            if (ri === 0) {
+              doc.rect(lineX, y + 4, 76, 38).fill(INK);
+              doc.fillColor('#fff').fontSize(19).text(`第${toChineseNum(m.generation)}世`, lineX, y + 11, { width: 76, align: 'center' });
+              doc.fillColor(INK).fontSize(20);
+            } else {
+              doc.fillColor(BROWN).fontSize(20).text('配偶', sepX - 60, y, { lineBreak: false });
+              doc.fillColor(INK).fontSize(20);
+            }
+            doc.text(row, textX, y, { width: maxW });
+            doc.fillColor(INK);
+            doc.moveTo(lineX, y + h - 4).lineTo(RIGHT_X, y + h - 4).lineWidth(1).strokeColor(INK).stroke();
+            y += h;
+          });
+        });
+      }
+    }
+
+    // ===== 10. 卷末 / 编写说明 / 后记（三段各自独立分页，标题与内容不重叠；后记置于最末） =====
     {
       const ps = byCat('afterword').map((i) => i.content).filter(Boolean).join('\n');
       const note = byCat('editorial_note').map((i) => i.content).filter(Boolean).join('\n');
-      if (ps || note) {
-        newPaper(`${shiName}卷末编录后记`);
+      if (note || ps) {
+        // 10-a 卷末（总起页）
+        newPaper(`${shiName}卷末`);
         pageTitle('卷末');
-        const colTop = M_TOP + 80;
-        const onNew = (sb: string) => () => {
-          pageNo += 1;
-          doc.rect(0, 0, PAGE_W, PAGE_H).fill(PAPER);
-          doc.rect(0, 0, PAGE_W, PAGE_H).lineWidth(2).strokeColor(INK).stroke();
-          doc.lineWidth(2).moveTo(PAGE_W - 110, 0).lineTo(PAGE_W - 110, PAGE_H).stroke();
-          drawSidebar(doc, sb, pageNo, hall);
-        };
-        drawVertical(doc, toSquareBrackets(note), { rightX: RIGHT_X - 60, leftX: M_LEFT + 250, topY: colTop, bottomY: BOTTOM_Y, fontSize: 19, onNewPage: onNew(`${shiName}卷末编录后记`) });
-        drawVertical(doc, toSquareBrackets(ps), { rightX: RIGHT_X - 330, leftX: M_LEFT + 30, topY: colTop, bottomY: BOTTOM_Y, fontSize: 19, onNewPage: onNew(`${shiName}卷末编录后记`) });
-        doc.fontSize(22).fillColor('#3a2410');
-        drawVertical(doc, '编写说明', { rightX: RIGHT_X, leftX: RIGHT_X - 44, topY: colTop, bottomY: colTop + 200, fontSize: 22 });
-        // 后记标题置于左栏右端（阅读起点），先标题后内容
-        drawVertical(doc, '后记', { rightX: RIGHT_X - 330, leftX: RIGHT_X - 370, topY: colTop, bottomY: colTop + 140, fontSize: 22 });
+        doc.fontSize(24).fillColor(BROWN)
+          .text('谨此为后裔留存，永续族脉。', M_LEFT + 60, M_TOP + 220, { width: RIGHT_X - M_LEFT - 120, align: 'center' });
+        // 10-b 编写说明
+        if (note) {
+          newPaper(`${shiName}编写说明`);
+          pageTitle('编写说明');
+          drawVertical(doc, toSquareBrackets(note), { rightX: RIGHT_X - 40, leftX: M_LEFT + 30, topY: M_TOP + 90, bottomY: BOTTOM_Y, fontSize: 19 });
+        }
+        // 10-c 后记（最后）
+        if (ps) {
+          newPaper(`${shiName}后记`);
+          pageTitle('后 记');
+          drawVertical(doc, toSquareBrackets(ps), { rightX: RIGHT_X - 40, leftX: M_LEFT + 30, topY: M_TOP + 90, bottomY: BOTTOM_Y, fontSize: 19 });
+        }
       }
     }
 

@@ -56,8 +56,9 @@ interface Section {
 
 const isMiniApp = ['WEAPP', 'TT'].includes(Taro.getEnv() as any);
 
-/** 输入的中英文小括号 → 方头括号（古籍排版） */
-const toBox = (s?: string | null) => (s ? String(s).replace(/[（(]/g, '【').replace(/[）)]/g, '】') : '');
+/** 古籍标点转换：小括号（）→方头括号 ︻︼；《》书名号→﹏ */
+const toBox = (s?: string | null) =>
+  s ? String(s).replace(/[（(]/g, '︻').replace(/[）)]/g, '︼').replace(/《/g, '﹏').replace(/》/g, '﹏') : '';
 
 const ExportPreviewPage: React.FC = () => {
   const router = useRouter();
