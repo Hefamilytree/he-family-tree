@@ -63,9 +63,20 @@ const ContactsPage: React.FC = () => {
       setItems(list);
 
       if (isNearby) {
+        // 按「区 + 街道」归组；residence 形如 “省 市 区 街道/小区”
+        const parseGroup = (residence?: string): string => {
+          if (!residence || !residence.trim()) return '其他地区'
+          const parts = residence.trim().split(/\s+/).filter(Boolean);
+          if (parts.length === 0) return '其他地区';
+          // 找含“区/县/市”的行政区划作为区
+          const di = parts.findIndex(p => /(区|县|市)$/.test(p));
+          const district = di >= 0 ? parts[di] : (parts[parts.length >= 2 ? parts.length - 2 : 0]);
+          const street = parts[parts.length - 1] === district ? '' : parts[parts.length - 1];
+          return street ? `${district} · ${street}` : district;
+        };
         const map = new Map<string, KinItem[]>();
         list.forEach((k) => {
-          const region = (k.residence || '其他地区').split(/[·•,，\s\-]/)[0] || '其他地区';
+          const region = parseGroup(k.residence);
           if (!map.has(region)) map.set(region, []);
           map.get(region)!.push(k);
         });

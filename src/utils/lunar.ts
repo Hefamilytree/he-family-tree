@@ -1,5 +1,46 @@
 import { Lunar } from 'lunar-javascript'
 
+/** 十二地支时辰 */
+const ZHI = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥']
+const BIRTH_TIME_OPTIONS = [
+  '子时(23-1点)', '丑时(1-3点)', '寅时(3-5点)', '卯时(5-7点)',
+  '辰时(7-9点)', '巳时(9-11点)', '午时(11-13点)', '未时(13-15点)',
+  '申时(15-17点)', '酉时(17-19点)', '戌时(19-21点)', '亥时(21-23点)',
+]
+export { BIRTH_TIME_OPTIONS }
+
+/** 将 birth_time（0-23 小时数 / 时辰关键字 / HH:mm）归一为“X时” */
+export function formatBirthTime(birthTime?: string | number | null): string {
+  if (birthTime === null || birthTime === undefined || birthTime === '') return ''
+  const raw = String(birthTime).trim()
+  if (!raw) return ''
+  // 已是中文时辰（含“子時/子时”等）
+  const hit = ZHI.find(z => raw.includes(z))
+  if (hit) return `${hit}时`
+  // HH:mm 或纯小时
+  const hm = raw.match(/^(\d{1,2})(?::(\d{1,2}))?$/)
+  if (hm) {
+    const h = +hm[1]
+    if (h >= 0 && h <= 23) return `${ZHI[Math.floor(((h + 1) % 24) / 2)]}时`
+  }
+  return raw
+}
+
+/**
+ * 出生日期统一格式：农历「年月日时辰」。
+ * @param dateStr 公历日期 YYYY-MM-DD
+ * @param birthTime 时辰（小时/关键字）
+ */
+export function formatBirthFull(
+  dateStr?: string | null,
+  birthTime?: string | number | null
+): string {
+  const base = toLunarBirth(dateStr)
+  if (!base) return ''
+  const t = formatBirthTime(birthTime)
+  return t ? `${base}${t}` : base
+}
+
 /**
  * 将公历完整日期(YYYY-MM-DD/YYYY/M/D)转换为农历字符串。
  * 仅年份(如 1950)时原样返回；空值返回空串。

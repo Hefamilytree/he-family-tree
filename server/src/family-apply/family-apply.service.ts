@@ -16,10 +16,10 @@ export class FamilyApplyService {
     return data?.[0]?.id || null;
   }
 
-  /** 判断是否管理员 */
+  /** 判断是否管理员（含主管理人员） */
   async isAdmin(userId: string): Promise<boolean> {
     const { data } = await this.supabase.from('users').select('role').eq('id', userId).single();
-    return data?.role === 'admin';
+    return data?.role === 'admin' || data?.role === 'super';
   }
 
   /** 提交申请（需登录） */
@@ -102,11 +102,14 @@ export class FamilyApplyService {
       .single();
     if (error) return { code: 500, msg: '批准失败', data: null };
 
-    // 申请人关联到新成员
+    // 申请人关联到新成员，并自动成为“认证宗亲”，由管理人员后续完善其宗亲信息
     if (memberId) {
-      await this.supabase.from('users').update({ member_id: memberId, family_id: familyId }).eq('id', app.applicant_id);
+      const up: any = { member_id: memberId, family_id: familyId, role: 'verified' };
+      if (app.phone) up.phone = app.phone;
+      if (app.residence) up.residence = app.residence;
+      await this.supabase.from('users').update(up).eq('id', app.applicant_id);
     }
-    return { code: 200, msg: '已批准加入家族', data };
+    return { code: 200, msg: '已批准加入家族，已成为认证宗亲', data };
   }
 
   /** 拒绝（管理员） */

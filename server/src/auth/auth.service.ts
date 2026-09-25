@@ -26,9 +26,14 @@ export class AuthService {
     // 密码加密
     const password_hash = await bcrypt.hash(password, 10);
 
-    // 首个注册用户自动成为“主管理人员”（唯一拥有设置管理人员权限）；其余为未认证宗亲
-    const { data: anyUser } = await this.supabase.from('users').select('id').limit(1);
-    const isFirst = !anyUser || anyUser.length === 0;
+    // 小程序后台管理员（首个注册用户）自动成为“唯一主管理人员”；其余为未认证宗亲
+    // 以是否已存在 super 作为判定，确保主管理人员全局唯一
+    const { data: existingSuper } = await this.supabase
+      .from('users')
+      .select('id')
+      .eq('role', 'super')
+      .limit(1);
+    const isFirst = !existingSuper || existingSuper.length === 0;
 
     // 创建用户
     const { data, error } = await this.supabase

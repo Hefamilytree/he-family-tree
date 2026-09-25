@@ -37,7 +37,7 @@ export class MembersService {
     const client = this.getClient();
     const { data, error } = await client
       .from('members')
-      .select('id, family_id, name, courtesy_name, gender, birth_date, death_date, parent_id, spouse_name, generation, generation_title, bio, is_alive, birth_place, burial_place, created_at, updated_at')
+      .select('id, family_id, name, courtesy_name, gender, birth_date, birth_time, phone, death_date, parent_id, spouse_name, generation, generation_title, bio, is_alive, birth_place, burial_place, created_at, updated_at')
       .eq('family_id', familyId)
       .order('generation', { ascending: true })
       .order('name', { ascending: true });
@@ -137,6 +137,8 @@ export class MembersService {
     courtesy_name?: string | null;
     gender?: string;
     birth_date?: string | null;
+    birth_time?: string | null;
+    phone?: string | null;
     death_date?: string | null;
     parent_id?: string | null;
     spouse_name?: string | null;
@@ -165,6 +167,8 @@ export class MembersService {
     courtesy_name?: string | null;
     gender?: string;
     birth_date?: string | null;
+    birth_time?: string | null;
+    phone?: string | null;
     death_date?: string | null;
     parent_id?: string | null;
     spouse_name?: string | null;

@@ -33,6 +33,8 @@ export class MembersController {
     courtesy_name?: string | null;
     gender?: string;
     birth_date?: string | null;
+    birth_time?: string | null;
+    phone?: string | null;
     death_date?: string | null;
     parent_id?: string | null;
     spouse_name?: string | null;
@@ -54,6 +56,8 @@ export class MembersController {
     courtesy_name?: string | null;
     gender?: string;
     birth_date?: string | null;
+    birth_time?: string | null;
+    phone?: string | null;
     death_date?: string | null;
     parent_id?: string | null;
     spouse_name?: string | null;

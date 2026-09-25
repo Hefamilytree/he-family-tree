@@ -52,6 +52,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "element-china-area-data": "^6.1.0",
     "lucide-react-taro": "^1.4.1",
     "lunar-javascript": "^1.7.7",
     "react": "^18.0.0",

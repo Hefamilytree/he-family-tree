@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { toLunarBirth } from '@/utils/lunar';
+import { toLunarBirth, formatBirthFull, BIRTH_TIME_OPTIONS } from '@/utils/lunar';
 import { Network } from '@/network';
 import { getAuthUser, memberDetailVisible, isAdmin } from '@/utils/permission';
 
@@ -44,6 +44,8 @@ interface Member {
   generation_title: string | null;
   is_alive: string;
   birth_date: string | null;
+  birth_time: string | null;
+  phone: string | null;
   death_date: string | null;
   parent_id: string | null;
   parent_name: string | null;
@@ -77,6 +79,8 @@ export default function Members() {
   const [formGender, setFormGender] = useState('male');
   const [formGenIndex, setFormGenIndex] = useState(0); // 字辈选项下标（0 起）
   const [formBirthDate, setFormBirthDate] = useState('');
+  const [formBirthTime, setFormBirthTime] = useState('');
+  const [formPhone, setFormPhone] = useState('');
   const [formDeathDate, setFormDeathDate] = useState('');
   const [formParentId, setFormParentId] = useState('');
   const [formSpouses, setFormSpouses] = useState<Spouse[]>([]);
@@ -172,6 +176,8 @@ export default function Members() {
     setFormGender('male');
     setFormGenIndex(0);
     setFormBirthDate('');
+    setFormBirthTime('');
+    setFormPhone('');
     setFormDeathDate('');
     setFormParentId('');
     setFormSpouses([]);
@@ -194,6 +200,8 @@ export default function Members() {
     setFormCourtesy(member.courtesy_name || '');
     setFormGender(member.gender);
     setFormBirthDate(member.birth_date || '');
+    setFormBirthTime(member.birth_time || '');
+    setFormPhone(member.phone || '');
     setFormDeathDate(member.death_date || '');
     setFormParentId(member.parent_id || '');
     setFormBio(member.bio || '');
@@ -260,6 +268,8 @@ export default function Members() {
         generation_title: genTitle,
         is_alive: formIsAlive,
         birth_date: formBirthDate || null,
+        birth_time: formBirthTime || null,
+        phone: formPhone || null,
         death_date: formIsAlive === 'no' ? (formDeathDate || null) : null,
         parent_id: formParentId || null,
         spouse_name: validSpouses.length > 0 ? validSpouses[0].name.trim() : null,
@@ -483,6 +493,20 @@ export default function Members() {
                     <Input className="w-full bg-transparent" placeholder="如：1950" value={formBirthDate} onInput={(e) => setFormBirthDate(e.detail.value)} />
                   </View>
                 </View>
+                <View className="flex-1">
+                  <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>出生时辰</Text>
+                  <Select value={formBirthTime || '__none__'} onValueChange={(v) => setFormBirthTime(v === '__none__' ? '' : v)}>
+                    <SelectTrigger className="w-full bg-[#FFFDF7] border rounded-lg" style={{ borderColor: '#E8E0D8' }}>
+                      <SelectValue placeholder="时辰（可不填）" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">不填时辰</SelectItem>
+                      {BIRTH_TIME_OPTIONS.map(o => (
+                        <SelectItem key={o} value={o.slice(0, 2)}>{o}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </View>
                 {formIsAlive === 'no' && (
                   <View className="flex-1">
                     <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>逝世日期</Text>
@@ -508,6 +532,13 @@ export default function Members() {
                   </View>
                 </View>
               )}
+
+              <View className="mb-3">
+                <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>联系方式（手机号）</Text>
+                <View className="bg-[#FFFDF7] rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
+                  <Input className="w-full bg-transparent" type="number" maxlength={11} placeholder="请输入联系电话（选填）" value={formPhone} onInput={(e) => setFormPhone(e.detail.value)} />
+                </View>
+              </View>
 
               <View className="mb-4">
                 <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>简介</Text>
@@ -543,6 +574,7 @@ export default function Members() {
                         {[
                           { value: 'alive', label: '健在', color: '#2E7D32' },
                           { value: 'deceased', label: '故', color: '#C62828' },
+                          { value: 'remarried', label: '续', color: '#1565C0' },
                           { value: 'divorced', label: '离异', color: '#6B5B4F' },
                         ].map(opt => (
                           <View
@@ -661,7 +693,7 @@ export default function Members() {
                         {detailVisible && (
                           <View className="mt-1">
                             <Text className="block text-xs" style={{ color: '#999' }}>
-                              {toLunarBirth(member.birth_date) || '未知'}
+                              {formatBirthFull(member.birth_date, member.birth_time) || '未知'}
                               {member.death_date ? ` - ${toLunarBirth(member.death_date)}` : member.is_alive === 'yes' ? ' - 健在' : ' - 已故'}
                             </Text>
                             {member.burial_place && member.is_alive === 'no' && (

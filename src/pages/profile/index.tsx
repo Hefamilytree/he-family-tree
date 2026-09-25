@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro, { useLoad, useDidShow } from '@tarojs/taro';
-import { User, Heart, MapPin, LogIn, LogOut, Shield, UserPlus, Trash2, House, HandHeart, Check, X, Send } from 'lucide-react-taro';
+import { User, Heart, LogIn, LogOut, Shield, UserPlus, Trash2, House, HandHeart, Check, X, Send } from 'lucide-react-taro';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import AddressPicker from '@/components/address-picker';
 import {
   Dialog,
   DialogContent,
@@ -76,6 +77,7 @@ const ProfilePage = () => {
     generation_title: '',
     phone: '',
     residence: '',
+    address: { province: '', city: '', district: '', street: '', text: '' } as { province?: string; city?: string; district?: string; street?: string; text?: string },
     message: '',
   });
   const [myApps, setMyApps] = useState<any[]>([]);
@@ -266,37 +268,6 @@ const ProfilePage = () => {
     });
   };
 
-  const handleRootSeeking = () => {
-    Taro.showModal({
-      title: '寻根问祖',
-      content: '即将跳转到「中华家谱」小程序，探索更多家族文化资源。',
-      confirmText: '前往',
-      cancelText: '取消',
-      success: (res) => {
-        if (res.confirm) {
-          Taro.navigateToMiniProgram({
-            appId: 'wx1234567890abcdef',
-            path: 'pages/index/index',
-            extraData: {
-              from: 'he-family-tree',
-            },
-            envVersion: 'release',
-            success: () => {
-              console.log('跳转成功');
-            },
-            fail: (err) => {
-              console.error('跳转失败:', err);
-              Taro.showToast({
-                title: '跳转失败，请检查小程序 AppID',
-                icon: 'none',
-              });
-            },
-          });
-        }
-      },
-    });
-  };
-
   const handleSetAdmin = () => {
     if (!isLoggedIn) {
       Taro.showToast({ title: '请先登录', icon: 'none' });
@@ -397,6 +368,7 @@ const ProfilePage = () => {
       generation_title: '',
       phone: userInfo?.phone || '',
       residence: userInfo?.residence || '',
+      address: { province: '', city: '', district: '', street: '', text: '' },
       message: '',
     });
     loadMyApps();
@@ -437,7 +409,7 @@ const ProfilePage = () => {
           generation: applyForm.generation.trim() || null,
           generation_title: applyForm.generation_title.trim() || null,
           phone: applyForm.phone.trim(),
-          residence: applyForm.residence.trim() || null,
+          residence: (applyForm.address.text || applyForm.residence).trim() || null,
           message: applyForm.message.trim() || null,
         },
         header: { Authorization: `Bearer ${token}` },
@@ -614,24 +586,6 @@ const ProfilePage = () => {
           </Card>
         )}
 
-        <Card
-          className="bg-amber-50 border-stone-200 active:opacity-80"
-          onClick={handleRootSeeking}
-        >
-          <CardContent className="p-4 flex items-center gap-3">
-            <View className="w-10 h-10 rounded-full bg-amber-700 flex items-center justify-center">
-              <MapPin size={20} color="#FFFDF7" />
-            </View>
-            <View className="flex-1">
-              <Text className="block text-base font-semibold text-stone-800">
-                寻根问祖
-              </Text>
-              <Text className="block text-sm text-stone-500">
-                链接更多家谱资源，探索家族起源
-              </Text>
-            </View>
-          </CardContent>
-        </Card>
 
         <Card
           className="bg-red-900 border-red-800 text-white active:opacity-80"
@@ -1004,14 +958,11 @@ const ProfilePage = () => {
 
             <View className="flex flex-col gap-1">
               <Label>现居住地</Label>
-              <View className="bg-white border border-stone-200 rounded-xl px-4 py-3">
-                <Input
-                  className="w-full"
-                  value={applyForm.residence}
-                  placeholder="省/市/区（县）"
-                  onInput={(e) => setApplyForm({ ...applyForm, residence: e.detail.value })}
-                />
-              </View>
+              <AddressPicker
+                value={applyForm.address}
+                streetPlaceholder="街道 / 小区名称（选填）"
+                onChange={(v) => setApplyForm({ ...applyForm, address: v, residence: v.text || '' })}
+              />
             </View>
 
             <View className="flex flex-col gap-1">

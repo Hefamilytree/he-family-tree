@@ -60,7 +60,9 @@ export const members = pgTable("members", {
 	courtesyName: varchar("courtesy_name", { length: 100 }), // 字（表字）
 	gender: varchar({ length: 10 }).default('male').notNull(),
 	birthDate: varchar("birth_date", { length: 20 }),
+	birthTime: varchar("birth_time", { length: 20 }), // 出生时辰
 	deathDate: varchar("death_date", { length: 20 }),
+	phone: varchar({ length: 32 }), // 联系方式
 	parentId: varchar("parent_id", { length: 36 }),
 	spouseName: varchar("spouse_name", { length: 100 }),
 	generation: integer().default(1).notNull(),
