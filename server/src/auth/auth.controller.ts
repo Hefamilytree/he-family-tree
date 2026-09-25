@@ -63,12 +63,23 @@ export class AuthController {
 
   @Post('set-admin')
   @HttpCode(HttpStatus.OK)
-  async setAdmin(@Body() body: { userId: string }) {
+  async setAdmin(
+    @Headers('authorization') authorization: string,
+    @Body() body: { userId: string }
+  ) {
+    if (!authorization) {
+      return { code: 401, msg: '未登录', data: null };
+    }
+    const token = authorization.replace('Bearer ', '');
+    const decoded = this.authService.verifyToken(token) as any;
+    if (!decoded) {
+      return { code: 401, msg: 'token 无效或已过期', data: null };
+    }
     const { userId } = body;
     if (!userId) {
       return { code: 400, msg: '用户 ID 不能为空', data: null };
     }
-    return this.authService.setAdmin(userId);
+    return this.authService.setAdmin(decoded.userId, userId);
   }
 
   @Post('wechat-login')

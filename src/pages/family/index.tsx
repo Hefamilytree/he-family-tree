@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Network } from '@/network';
 import { toLunarBirth } from '@/utils/lunar';
+import { getAuthUser, memberDetailVisible } from '@/utils/permission';
 import './index.css';
 
 interface FamilyInfo {
@@ -44,6 +45,8 @@ interface TreeNode {
 export default function FamilyTree() {
   const [family, setFamily] = useState<FamilyInfo | null>(null);
   const [roots, setRoots] = useState<TreeNode[]>([]);
+  // 未认证仅显示成员姓名（隐藏出生/简介/葬地等敏感信息）
+  const detailVisible = memberDetailVisible(getAuthUser());
   const [loading, setLoading] = useState(true);
   const [zoom, setZoom] = useState(1);
 
@@ -117,23 +120,27 @@ export default function FamilyTree() {
                 {node.generation_title}字辈
               </Text>
             )}
-            <Text className="block text-xs text-center mt-1" style={{ color: '#555' }}>
-              {(node.birth_date ? toLunarBirth(node.birth_date) : '') || '生失考'}
-              {node.death_date ? `—${toLunarBirth(node.death_date)}` : node.is_alive === 'no' ? '—卒失考' : ''}
-            </Text>
-            {node.is_alive === 'no' && (node.burial_place || true) && (
-              <Text className="block text-xs text-center mt-1" style={{ color: '#999' }}>
-                葬：{node.burial_place || '不详'}
-              </Text>
+            {detailVisible && (
+              <>
+                <Text className="block text-xs text-center mt-1" style={{ color: '#555' }}>
+                  {(node.birth_date ? toLunarBirth(node.birth_date) : '') || '生失考'}
+                  {node.death_date ? `—${toLunarBirth(node.death_date)}` : node.is_alive === 'no' ? '—卒失考' : ''}
+                </Text>
+                {node.is_alive === 'no' && (node.burial_place || true) && (
+                  <Text className="block text-xs text-center mt-1" style={{ color: '#999' }}>
+                    葬：{node.burial_place || '不详'}
+                  </Text>
+                )}
+                {node.bio ? (
+                  <Text className="block text-xs text-center mt-1" style={{ color: '#666', lineHeight: 1.5 }}>
+                    {node.bio}
+                  </Text>
+                ) : null}
+                <Text className="block text-xs text-center mt-1" style={{ color: '#B0A090' }}>
+                  点击编辑
+                </Text>
+              </>
             )}
-            {node.bio ? (
-              <Text className="block text-xs text-center mt-1" style={{ color: '#666', lineHeight: 1.5 }}>
-                {node.bio}
-              </Text>
-            ) : null}
-            <Text className="block text-xs text-center mt-1" style={{ color: '#B0A090' }}>
-              点击编辑
-            </Text>
           </View>
           {/* 配偶卡片（可多位） */}
           {spouseList.map((sp, idx) => (

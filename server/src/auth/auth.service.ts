@@ -26,6 +26,10 @@ export class AuthService {
     // 密码加密
     const password_hash = await bcrypt.hash(password, 10);
 
+    // 首个注册用户自动成为“主管理人员”（唯一拥有设置管理人员权限）；其余为未认证宗亲
+    const { data: anyUser } = await this.supabase.from('users').select('id').limit(1);
+    const isFirst = !anyUser || anyUser.length === 0;
+
     // 创建用户
     const { data, error } = await this.supabase
       .from('users')
@@ -33,7 +37,7 @@ export class AuthService {
         username,
         password_hash,
         nickname: nickname || username,
-        role: 'member',
+        role: isFirst ? 'super' : 'member',
       })
       .select()
       .single();
@@ -157,26 +161,28 @@ export class AuthService {
     };
   }
 
-  async setAdmin(userId: string) {
+  async setAdmin(operatorId: string, targetUserId: string) {
+    if (!operatorId || operatorId === targetUserId) {
+      return { code: 400, msg: '参数不合法', data: null };
+    }
+    // 仅主管理人员可设置管理人员，其它人无权设置
+    const { data: operator } = await this.supabase.from('users').select('role').eq('id', operatorId).single();
+    if (!operator || operator.role !== 'super') {
+      return { code: 403, msg: '仅主管理人员可设置管理人员', data: null };
+    }
     const { data, error } = await this.supabase
       .from('users')
       .update({ role: 'admin' })
-      .eq('id', userId)
-      .select()
+      .eq('id', targetUserId)
+      .select('id, username, role')
       .single();
-
-    if (error) {
+    if (error || !data) {
       return { code: 500, msg: '设置失败', data: null };
     }
-
     return {
       code: 200,
-      msg: '已设置为管理员',
-      data: {
-        id: data.id,
-        username: data.username,
-        role: data.role,
-      },
+      msg: '已设置为管理人员',
+      data: { id: data.id, username: data.username, role: data.role },
     };
   }
 
@@ -288,9 +294,9 @@ export class AuthService {
 
     const { data, error } = await this.supabase
       .from('users')
-      .update({ member_id: memberId, phone: phone.trim(), residence: residence.trim() })
+      .update({ member_id: memberId, phone: phone.trim(), residence: residence.trim(), role: 'verified' })
       .eq('id', userId)
-      .select()
+      .select('id, username, role')
       .single();
     if (error) {
       return { code: 500, msg: '关联失败，请重试', data: null };
@@ -301,10 +307,10 @@ export class AuthService {
       data: {
         id: data.id,
         username: data.username,
-        role: data.role,
-        member_id: data.member_id,
-        phone: data.phone,
-        residence: data.residence,
+        role: 'verified',
+        member_id: memberId,
+        phone: phone.trim(),
+        residence: residence.trim(),
         generation_title: finalTitle,
       },
     };
@@ -316,8 +322,8 @@ export class AuthService {
       .select('id, role')
       .eq('id', userId)
       .single();
-    if (meErr || !me || me.role !== 'admin') {
-      return { code: 403, msg: '仅主管理员可清除全部数据', data: null };
+    if (meErr || !me || !['super', 'admin'].includes(me.role)) {
+      return { code: 403, msg: '仅主管理人员可清除全部数据', data: null };
     }
     const tables = ['spouses', 'comments', 'registrations', 'economic_development', 'harmony_activities', 'cultural_heritage', 'members'];
     for (const t of tables) {

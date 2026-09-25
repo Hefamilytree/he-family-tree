@@ -9,6 +9,7 @@ import {
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Network } from '@/network';
+import { getAuthUser, canViewBlock, type AuthUser, type BlockKey } from '@/utils/permission';
 import './index.css';
 
 interface FamilyInfo {
@@ -73,6 +74,7 @@ const UNIT_SECTIONS = [
 export default function Index() {
   const [family, setFamily] = useState<FamilyInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<AuthUser | null>(null);
 
   const loadFamily = async () => {
     setLoading(true);
@@ -88,7 +90,7 @@ export default function Index() {
     }
   };
 
-  useDidShow(() => { loadFamily(); });
+  useDidShow(() => { setUser(getAuthUser()); loadFamily(); });
 
   const handleSectionClick = (sectionId: string, itemKey: string, itemName: string) => {
     if (itemKey === 'birthday') {
@@ -157,7 +159,7 @@ export default function Index() {
 
       {/* 三大单元 */}
       <View className="px-4">
-        {UNIT_SECTIONS.map((section) => (
+        {UNIT_SECTIONS.filter((s) => canViewBlock(user, s.id as BlockKey)).map((section) => (
           <View key={section.id} className="mb-6">
             <View className="flex items-center mb-3 px-1">
               <View className="w-1 h-5 rounded-full mr-2" style={{ backgroundColor: section.color }} />

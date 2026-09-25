@@ -276,7 +276,6 @@ export class PdfService {
         ['前言', 'preface'], ['一、家史', 'history'], ['二、家风', 'style'], ['三、家训', 'rule'],
         ['四、家族字辈', 'rank'], ['五、家族事记', 'event'], ['六、世代人名索引', 'index'],
         ['七、宗亲树', 'tree'], ['八、历代世系图', 'shixi'], ['九、卷末', 'volEnd'],
-        ['十、编写说明', 'note'], ['十一、后记', 'afterword'],
       ];
       const catalog = names.filter(([, k]) => hasSec[k]).map(([t]) => t);
       doc.fontSize(26).fillColor(INK);
@@ -535,27 +534,21 @@ export class PdfService {
       }
     }
 
-    // ===== 10. 卷末 / 编写说明 / 后记（三段各自独立分页，标题与内容不重叠；后记置于最末） =====
+    // ===== 10. 卷末（大标题）；编写说明/后记 采用左右两栏排版、内容不重叠；目录仅显示“卷末” =====
     {
       const ps = byCat('afterword').map((i) => i.content).filter(Boolean).join('\n');
       const note = byCat('editorial_note').map((i) => i.content).filter(Boolean).join('\n');
       if (note || ps) {
-        // 10-a 卷末（总起页）
         newPaper(`${shiName}卷末`);
-        pageTitle('卷末');
-        doc.fontSize(24).fillColor(BROWN)
-          .text('谨此为后裔留存，永续族脉。', M_LEFT + 60, M_TOP + 220, { width: RIGHT_X - M_LEFT - 120, align: 'center' });
-        // 10-b 编写说明
+        pageTitle('卷 末');
+        const midX = Math.round((RIGHT_X - 40 + M_LEFT + 30) / 2);
+        // 左栏：编写说明
         if (note) {
-          newPaper(`${shiName}编写说明`);
-          pageTitle('编写说明');
-          drawVertical(doc, toSquareBrackets(note), { rightX: RIGHT_X - 40, leftX: M_LEFT + 30, topY: M_TOP + 90, bottomY: BOTTOM_Y, fontSize: 19 });
+          drawVertical(doc, toSquareBrackets(`编写说明\n${note}`), { rightX: midX, leftX: M_LEFT + 30, topY: M_TOP + 100, bottomY: BOTTOM_Y, fontSize: 19 });
         }
-        // 10-c 后记（最后）
+        // 右栏：后记（与编写说明左右并列，互不重叠）
         if (ps) {
-          newPaper(`${shiName}后记`);
-          pageTitle('后 记');
-          drawVertical(doc, toSquareBrackets(ps), { rightX: RIGHT_X - 40, leftX: M_LEFT + 30, topY: M_TOP + 90, bottomY: BOTTOM_Y, fontSize: 19 });
+          drawVertical(doc, toSquareBrackets(`后　记\n${ps}`), { rightX: RIGHT_X - 40, leftX: midX + 70, topY: M_TOP + 100, bottomY: BOTTOM_Y, fontSize: 19 });
         }
       }
     }

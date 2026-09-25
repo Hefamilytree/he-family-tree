@@ -9,6 +9,7 @@ interface ContactRow {
   member_id: string | null;
   members?: {
     name: string | null;
+    parent_name: string | null;
     generation: number | null;
     generation_title: string | null;
     birth_date: string | null;
@@ -30,6 +31,7 @@ interface ManualRow {
 export interface ContactItem {
   id: string;
   name: string;
+  parentName: string;
   phone: string;
   residence: string;
   generation: number | null;
@@ -49,6 +51,7 @@ export class ContactsService {
     return {
       id: row.id,
       name: m?.name || row.nickname || '宗亲',
+      parentName: m?.parent_name || '',
       phone: row.phone || '',
       residence: row.residence || '',
       generation: m?.generation ?? null,
@@ -62,6 +65,7 @@ export class ContactsService {
     return {
       id: row.id,
       name: row.name || '宗亲',
+      parentName: '',
       phone: row.phone || '',
       residence: row.residence || '',
       generation: row.generation ?? null,
@@ -81,13 +85,15 @@ export class ContactsService {
         .not('phone', 'is', null),
       this.supabase
         .from('members')
-        .select('id, name, generation, generation_title, birth_date, bio, burial_place'),
+        .select('id, name, parent_id, generation, generation_title, birth_date, bio, burial_place'),
     ]);
     if (usersRes.error) {
       console.error('查询通讯录失败:', usersRes.error.message);
       return [];
     }
-    const memberMap = new Map<string, any>((membersRes.data || []).map((m: any) => [m.id, m]));
+    const memberRows = (membersRes.data || []) as any[];
+    const parentMap = new Map<string, string>(memberRows.filter((m: any) => m.parent_id).map((m: any) => [m.id, m.name]));
+    const memberMap = new Map<string, any>(memberRows.map((m: any) => [m.id, m]));
     const rows: ContactRow[] = ((usersRes.data || []) as any[]).map((u) => {
       const m = u.member_id ? memberMap.get(u.member_id) : undefined;
       return {
@@ -99,6 +105,7 @@ export class ContactsService {
         members: m
           ? {
               name: m.name,
+              parent_name: parentMap.get(m.parent_id) || '',
               generation: m.generation,
               generation_title: m.generation_title,
               birth_date: m.birth_date,

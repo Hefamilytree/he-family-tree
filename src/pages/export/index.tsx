@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { Printer, TreePine, Users } from 'lucide-react-taro';
 import { Network } from '@/network';
+import { getAuthUser, canPrint } from '@/utils/permission';
 
 interface FamilyInfo {
   id: string;
@@ -96,6 +97,10 @@ export default function Export() {
   const sortedGens = Object.keys(generations).map(Number).sort((a, b) => a - b);
 
   const handlePreview = () => {
+    if (!canPrint(getAuthUser())) {
+      Taro.showToast({ title: '需认证宗亲身份后方可打印族谱', icon: 'none' });
+      return;
+    }
     Taro.navigateTo({
       url: `/pages/export-preview/index?mode=${exportMode}&branch=${selectedBranch || ''}&toAncestor=${includeAncestor ? '1' : '0'}&startGen=${startGen}&endGen=${endGen}`
     });
@@ -204,6 +209,9 @@ export default function Export() {
             <Printer size={16} color="#FFFDF7" />
             <Text className="ml-2">生成打印预览</Text>
           </Button>
+          <Text className="block text-xs mt-2 text-center" style={{ color: canPrint(getAuthUser()) ? '#B0A090' : '#C0392B' }}>
+            {canPrint(getAuthUser()) ? '认证宗亲及以上可打印族谱' : '需认证宗亲身份后方可打印族谱'}
+          </Text>
         </CardContent>
       </Card>
 

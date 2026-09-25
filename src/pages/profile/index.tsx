@@ -17,6 +17,16 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Network } from '@/network';
+import { isAdmin, isSuper } from '@/utils/permission';
+
+const roleLabel = (role?: string) => {
+  const r = (role || '').toLowerCase();
+  if (r === 'super') return '主管理人员';
+  if (r === 'admin') return '管理人员';
+  if (r === 'verified') return '认证宗亲';
+  if (r === 'member') return '未认证宗亲';
+  return '游客';
+};
 
 const statusText = (status?: string) => {
   switch (status) {
@@ -502,11 +512,9 @@ const ProfilePage = () => {
                 <Text className="text-sm text-amber-100">
                   {userInfo?.username}
                 </Text>
-                {userInfo?.role === 'admin' && (
-                  <View className="px-2 py-1 bg-amber-500 rounded-full">
-                    <Text className="text-xs text-white">管理员</Text>
-                  </View>
-                )}
+                <View className="px-2 py-1 rounded-full" style={{ backgroundColor: isAdmin(userInfo) ? '#B45309' : '#D97706' }}>
+                  <Text className="text-xs text-white">{roleLabel(userInfo?.role)}</Text>
+                </View>
               </View>
             </View>
             <Button
@@ -563,7 +571,7 @@ const ProfilePage = () => {
         )}
 
         {/* 管理员功能：清除全部数据 */}
-        {isLoggedIn && userInfo?.role === 'admin' && (
+        {isLoggedIn && userInfo?.role === 'super' && (
           <Card
             className="bg-red-100 border-red-300 active:opacity-80"
             onClick={handleClearData}
@@ -577,15 +585,15 @@ const ProfilePage = () => {
                   清除全部数据
                 </Text>
                 <Text className="block text-sm text-red-500">
-                  清除所有家族信息、成员、配偶及板块数据（仅主管理员）
+                  一键清除所有家族信息、成员、配偶及板块数据（仅主管理人员）
                 </Text>
               </View>
             </CardContent>
           </Card>
         )}
 
-        {/* 管理员功能 */}
-        {isLoggedIn && (
+        {/* 管理员功能：仅主管理人员可设置管理人员 */}
+        {isLoggedIn && isSuper(userInfo) && (
           <Card
             className="bg-amber-100 border-amber-300 active:opacity-80"
             onClick={handleSetAdmin}
@@ -596,10 +604,10 @@ const ProfilePage = () => {
               </View>
               <View className="flex-1">
                 <Text className="block text-base font-semibold text-stone-800">
-                  管理员设置
+                  管理人员设置
                 </Text>
                 <Text className="block text-sm text-stone-500">
-                  {userInfo?.role === 'admin' ? '当前已是管理员' : '点击设置为管理员'}
+                  仅主管理人员可设置管理人员，其它人无权设置
                 </Text>
               </View>
             </CardContent>
@@ -665,7 +673,7 @@ const ProfilePage = () => {
           </CardContent>
         </Card>
 
-        {userInfo?.role === 'admin' && (
+        {isLoggedIn && isAdmin(userInfo) && (
           <Card
             className="bg-amber-100 border-amber-300 active:opacity-80"
             onClick={loadAdminInbox}

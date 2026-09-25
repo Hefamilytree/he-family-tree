@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toLunarBirth } from '@/utils/lunar';
 import { Network } from '@/network';
+import { getAuthUser, memberDetailVisible, isAdmin } from '@/utils/permission';
 
 interface Spouse {
   id?: string;
@@ -60,6 +61,9 @@ interface GenerationOption {
 export default function Members() {
   const [members, setMembers] = useState<Member[]>([]);
   const [filteredMembers, setFilteredMembers] = useState<Member[]>([]);
+  // 权限：无成员详情展示权限时仅显示姓名；认证宗亲不可编辑成员（需管理人员处理）
+  const detailVisible = memberDetailVisible(getAuthUser());
+  const canManage = isAdmin(getAuthUser());
   const [generationOptions, setGenerationOptions] = useState<GenerationOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchText, setSearchText] = useState('');
@@ -329,9 +333,10 @@ export default function Members() {
   };
 
   const spouseStatusLabel = (status: string) => {
-    if (status === 'deceased') return '故';
-    if (status === 'divorced') return '离异';
-    return '';
+    if (status === 'deceased' || status === '故') return '故';
+    if (status === 'divorced' || status === '离异') return '离异';
+    if (status === 'remarried' || status === '续') return '续';
+    return '健在';
   };
 
   // 父代候选（不包含自身及后代，简单排除自身）
@@ -647,37 +652,44 @@ export default function Members() {
                           <Text className="text-xs px-2 py-1 rounded" style={{ backgroundColor: member.gender === 'male' ? '#E3F2FD' : '#FCE4EC', color: member.gender === 'male' ? '#1565C0' : '#C62828' }}>
                             {member.gender === 'male' ? '男' : '女'}
                           </Text>
-                          <Text className="text-xs px-2 py-1 rounded" style={{ backgroundColor: '#FFF5F0', color: '#8B2500' }}>
-                            {member.generation_title ? `${member.generation_title}字辈` : `第${member.generation}世`}
-                          </Text>
                         </View>
-                        <Text className="block text-xs" style={{ color: '#999' }}>
-                          {toLunarBirth(member.birth_date) || '未知'}
-                          {member.death_date ? ` - ${toLunarBirth(member.death_date)}` : member.is_alive === 'yes' ? ' - 健在' : ' - 已故'}
-                        </Text>
-                        {member.burial_place && member.is_alive === 'no' && (
-                          <Text className="block text-xs mt-1" style={{ color: '#6B5B4F' }}>
-                            葬地：{member.burial_place}
-                          </Text>
-                        )}
-                        {renderSpouseText(member)}
                         {member.parent_name && (
                           <Text className="block text-xs" style={{ color: '#6B5B4F' }}>
                             父：{member.parent_name}
                           </Text>
                         )}
-                        {member.birth_place && (
-                          <Text className="block text-xs" style={{ color: '#6B5B4F' }}>
-                            出生地：{member.birth_place}
-                          </Text>
-                        )}
-                        {member.bio && (
-                          <Text className="block text-xs mt-1" style={{ color: '#999' }}>
-                            {member.bio}
-                          </Text>
+                        {detailVisible && (
+                          <View className="mt-1">
+                            <Text className="block text-xs" style={{ color: '#999' }}>
+                              {toLunarBirth(member.birth_date) || '未知'}
+                              {member.death_date ? ` - ${toLunarBirth(member.death_date)}` : member.is_alive === 'yes' ? ' - 健在' : ' - 已故'}
+                            </Text>
+                            {member.burial_place && member.is_alive === 'no' && (
+                              <Text className="block text-xs mt-1" style={{ color: '#6B5B4F' }}>
+                                葬地：{member.burial_place}
+                              </Text>
+                            )}
+                            {member.generation_title && (
+                              <Text className="block text-xs mt-1" style={{ color: '#8B2500' }}>
+                                {member.generation_title}字辈
+                              </Text>
+                            )}
+                            {renderSpouseText(member)}
+                            {member.birth_place && (
+                              <Text className="block text-xs" style={{ color: '#6B5B4F' }}>
+                                出生地：{member.birth_place}
+                              </Text>
+                            )}
+                            {member.bio && (
+                              <Text className="block text-xs mt-1" style={{ color: '#999' }}>
+                                {member.bio}
+                              </Text>
+                            )}
+                          </View>
                         )}
                       </View>
                     </View>
+                    {canManage && (
                     <View className="flex gap-2">
                       <View onClick={() => handleEdit(member)} className="p-2 rounded-lg" style={{ backgroundColor: '#FFF5F0' }}>
                         <Pencil size={16} color="#8B2500" />
@@ -686,6 +698,7 @@ export default function Members() {
                         <Trash2 size={16} color="#C62828" />
                       </View>
                     </View>
+                    )}
                   </View>
                 </CardContent>
               </Card>

@@ -15,6 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 interface KinItem {
   id: string;
   name: string;
+  parentName?: string;
   generation?: number | null;
   generationTitle?: string;
   phone?: string;
@@ -178,6 +179,9 @@ const ContactsPage: React.FC = () => {
                 {k.generation ? (
                   <Text className="block text-xs text-stone-400">第{k.generation}世</Text>
                 ) : null}
+                {!k.parentName ? null : (
+                  <Text className="block text-xs text-stone-500">父：{k.parentName}</Text>
+                )}
                 {isManual ? (
                   <View className="px-2 py-1 rounded bg-stone-200">
                     <Text className="text-xs text-stone-500">手动</Text>
