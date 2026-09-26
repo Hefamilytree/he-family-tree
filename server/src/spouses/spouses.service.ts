@@ -13,6 +13,7 @@ export class SpousesService {
     deathDate?: string;
     bio?: string;
     burialPlace?: string;
+    phone?: string;
   }) {
     const deceased = input.status === 'deceased';
     const birth = input.birthDate?.trim() || (deceased ? '生失考' : null);
@@ -25,6 +26,7 @@ export class SpousesService {
       death_date: death,
       bio: input.bio?.trim() || null,
       burial_place: burial,
+      phone: input.phone?.trim() || null,
     };
   }
 
@@ -39,8 +41,8 @@ export class SpousesService {
     return data;
   }
 
-  async create(memberId: string, name: string, status: string, birthDate?: string, deathDate?: string, bio?: string, burialPlace?: string) {
-    const payload = this.normalize({ name, status, birthDate, deathDate, bio, burialPlace });
+  async create(memberId: string, name: string, status: string, birthDate?: string, deathDate?: string, bio?: string, burialPlace?: string, phone?: string) {
+    const payload = this.normalize({ name, status, birthDate, deathDate, bio, burialPlace, phone });
     const { data, error } = await this.supabase
       .from('spouses')
       .insert({ member_id: memberId, ...payload })
@@ -51,7 +53,7 @@ export class SpousesService {
     return data;
   }
 
-  async update(id: string, updates: { name?: string; status?: string; birth_date?: string | null; death_date?: string | null; bio?: string | null; burial_place?: string | null }) {
+  async update(id: string, updates: { name?: string; status?: string; birth_date?: string | null; death_date?: string | null; bio?: string | null; burial_place?: string | null; phone?: string | null }) {
     const isEmpty = (v: unknown) => v === undefined || v === null || String(v).trim() === '';
     // 若状态变为已故，自动补全失考信息
     if (updates.status === 'deceased') {

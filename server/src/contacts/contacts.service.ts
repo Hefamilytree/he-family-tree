@@ -85,15 +85,17 @@ export class ContactsService {
         .not('phone', 'is', null),
       this.supabase
         .from('members')
-        .select('id, name, parent_id, generation, generation_title, birth_date, bio, burial_place'),
+        .select('id, name, parent_id, generation, generation_title, birth_date, bio, burial_place, is_alive'),
     ]);
     if (usersRes.error) {
       console.error('查询通讯录失败:', usersRes.error.message);
       return [];
     }
     const memberRows = (membersRes.data || []) as any[];
-    const parentMap = new Map<string, string>(memberRows.filter((m: any) => m.parent_id).map((m: any) => [m.id, m.name]));
-    const memberMap = new Map<string, any>(memberRows.map((m: any) => [m.id, m]));
+    // 成员/配偶标记为非健在时，通讯录与附近宗亲隐藏（族谱后台仍保留）
+    const livingMembers = memberRows.filter((m: any) => (m.is_alive ?? 'yes') === 'yes');
+    const parentMap = new Map<string, string>(livingMembers.filter((m: any) => m.parent_id).map((m: any) => [m.id, m.name]));
+    const memberMap = new Map<string, any>(livingMembers.map((m: any) => [m.id, m]));
     const rows: ContactRow[] = ((usersRes.data || []) as any[]).map((u) => {
       const m = u.member_id ? memberMap.get(u.member_id) : undefined;
       return {

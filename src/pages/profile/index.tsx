@@ -59,6 +59,7 @@ const ProfilePage = () => {
   // 创建家族
   const [showFamilyDialog, setShowFamilyDialog] = useState(false);
   const [creatingFamily, setCreatingFamily] = useState(false);
+  const [familyExists, setFamilyExists] = useState(false);
   const [familyForm, setFamilyForm] = useState({
     surname: '',
     family_name: '',
@@ -77,7 +78,7 @@ const ProfilePage = () => {
     generation_title: '',
     phone: '',
     residence: '',
-    address: { province: '', city: '', district: '', street: '', text: '' } as { province?: string; city?: string; district?: string; street?: string; text?: string },
+    address: { country: '中国', province: '', city: '', district: '', street: '', text: '' } as { country?: string; province?: string; city?: string; district?: string; street?: string; text?: string },
     message: '',
   });
   const [myApps, setMyApps] = useState<any[]>([]);
@@ -102,6 +103,12 @@ const ProfilePage = () => {
       setUserInfo(null);
       setIsLoggedIn(false);
     }
+    // 查询是否已有家族：已有则隐藏「创建家族」入口
+    Network.request({ url: '/api/family' })
+      .then((res: any) => {
+        setFamilyExists(!!res?.data?.data);
+      })
+      .catch(() => setFamilyExists(false));
   });
 
   const handleLogin = () => {
@@ -346,6 +353,7 @@ const ProfilePage = () => {
       if (res.data.code === 200) {
         Taro.showToast({ title: '家族创建成功', icon: 'success' });
         setShowFamilyDialog(false);
+        setFamilyExists(true);
       } else {
         Taro.showToast({ title: res.data.msg || '创建失败', icon: 'none' });
       }
@@ -368,7 +376,7 @@ const ProfilePage = () => {
       generation_title: '',
       phone: userInfo?.phone || '',
       residence: userInfo?.residence || '',
-      address: { province: '', city: '', district: '', street: '', text: '' },
+      address: { country: '中国', province: '', city: '', district: '', street: '', text: '' },
       message: '',
     });
     loadMyApps();
@@ -520,8 +528,8 @@ const ProfilePage = () => {
 
       {/* 功能菜单 */}
       <View className="px-4 py-6 space-y-4">
-        {/* 创建家族 */}
-        {isLoggedIn && (
+        {/* 创建家族：仅在尚无家族时展示，家族创建成功后对所有成员隐藏 */}
+        {isLoggedIn && !familyExists && (
           <Card
             className="bg-amber-100 border-amber-300 active:opacity-80"
             onClick={handleOpenCreateFamily}

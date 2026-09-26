@@ -1,9 +1,13 @@
-import { Controller, Get, Post, Put, Body, Param, HttpCode } from '@nestjs/common';
+import { Controller, Get, Post, Put, Body, Param, HttpCode, Headers, UnauthorizedException } from '@nestjs/common';
 import { FamilyService } from './family.service';
+import { AuthService } from '@/auth/auth.service';
 
 @Controller('family')
 export class FamilyController {
-  constructor(private readonly familyService: FamilyService) {}
+  constructor(
+    private readonly familyService: FamilyService,
+    private readonly authService: AuthService,
+  ) {}
 
   @Get()
   @HttpCode(200)
@@ -14,15 +18,22 @@ export class FamilyController {
 
   @Post()
   @HttpCode(200)
-  async createFamily(@Body() body: {
-    surname: string;
-    family_name: string;
-    hall_name?: string | null;
-    motto?: string | null;
-    description?: string | null;
-    origin?: string | null;
-  }) {
-    const data = await this.familyService.createFamily(body);
+  async createFamily(
+    @Headers('authorization') authorization: string,
+    @Body() body: {
+      surname: string;
+      family_name: string;
+      hall_name?: string | null;
+      motto?: string | null;
+      description?: string | null;
+      origin?: string | null;
+    },
+  ) {
+    const token = (authorization || '').replace(/^Bearer\s+/i, '');
+    if (!token) throw new UnauthorizedException('请先登录');
+    const decoded = this.authService.verifyToken(token) as { id: string };
+    if (!decoded?.id) throw new UnauthorizedException('登录已失效');
+    const data = await this.familyService.createFamily(body, decoded.id);
     return { code: 200, msg: '创建成功', data };
   }
 

@@ -15,11 +15,12 @@ import { getAuthUser, memberDetailVisible, isAdmin } from '@/utils/permission';
 interface Spouse {
   id?: string;
   name: string;
-  status: string; // alive 健在 / deceased 已故 / divorced 离异
+  status: string; // alive 健在 / deceased 已故 / continued 续 / divorced 离异
   birthDate?: string;
   deathDate?: string;
   bio?: string;
   burialPlace?: string;
+  phone?: string;
 }
 
 /** 兼容后端配偶字段（snake_case）与表单字段（camelCase） */
@@ -32,6 +33,7 @@ function normalizeSpouse(raw: any): Spouse {
     deathDate: raw.deathDate ?? raw.death_date ?? '',
     bio: raw.bio ?? '',
     burialPlace: raw.burialPlace ?? raw.burial_place ?? '',
+    phone: raw.phone ?? '',
   };
 }
 
@@ -237,7 +239,7 @@ export default function Members() {
     setFormSpouses(formSpouses.filter((_, i) => i !== idx));
   };
 
-  const handleUpdateSpouse = (idx: number, field: 'name' | 'status' | 'birthDate' | 'deathDate' | 'bio' | 'burialPlace', value: string) => {
+  const handleUpdateSpouse = (idx: number, field: 'name' | 'status' | 'birthDate' | 'deathDate' | 'bio' | 'burialPlace' | 'phone', value: string) => {
     setFormSpouses(formSpouses.map((s, i) => i === idx ? { ...s, [field]: value } : s));
   };
 
@@ -312,6 +314,7 @@ export default function Members() {
               deathDate: s.status === 'deceased' ? (s.deathDate || null) : null,
               bio: s.bio?.trim() || null,
               burialPlace: s.status === 'deceased' ? (s.burialPlace?.trim() || null) : null,
+              phone: s.phone?.trim() || null,
             },
           }).catch((err) => console.error('保存配偶失败:', err));
         }
@@ -607,6 +610,12 @@ export default function Members() {
                         </View>
                       )}
                     </View>
+                    <View className="mt-2">
+                      <Text className="block text-xs mb-1" style={{ color: '#6B5B4F' }}>联系电话</Text>
+                      <View className="bg-[#FFFDF7] rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
+                        <Input className="w-full bg-transparent" type="number" maxlength={11} placeholder="配偶联系电话（选填）" value={spouse.phone || ''} onInput={(e) => handleUpdateSpouse(idx, 'phone', e.detail.value)} />
+                      </View>
+                    </View>
                     {spouse.status === 'deceased' && (
                       <View className="mt-2">
                         <Text className="block text-xs mb-1" style={{ color: '#6B5B4F' }}>葬地（留空记为「葬地不详」）</Text>
@@ -762,6 +771,7 @@ export default function Members() {
               <Text className="block text-xs" style={{ color: '#999' }}>葬地：{s.burialPlace}</Text>
             )}
             {s.bio && <Text className="block text-xs" style={{ color: '#999' }}>{s.bio}</Text>}
+            {s.phone && <Text className="block text-xs" style={{ color: '#999' }}>电话：{s.phone}</Text>}
           </View>
         ))}
       </View>
