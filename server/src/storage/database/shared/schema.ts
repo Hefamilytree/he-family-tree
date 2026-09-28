@@ -149,6 +149,7 @@ export const users = pgTable("users", {
 			name: "users_family_id_fkey"
 		}).onDelete("set null"),
 	unique("users_username_key").on(table.username),
+	unique("users_openid_key").on(table.openid),
 ]);
 
 export const spouses = pgTable("spouses", {

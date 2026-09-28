@@ -142,8 +142,111 @@ export class AuthService {
     };
   }
 
-  async updateProfile(userId: string, updates: { nickname?: string; avatar_url?: string }) {
+  /**
+   * 小程序端微信登录：
+   *  - loginCode：Taro.login() 得到，用于后端换取 openid（账号唯一标识，永久绑定）
+   *  - phoneCode：getPhoneNumber 按钮回调 code，用于换取手机号（登录必须验证手机号）
+   */
+  async wxCodeLogin(loginCode: string, phoneCode: string, nickname?: string, avatarUrl?: string) {
+    const { code2Session, getPhoneNumber } = require('./wx.api');
+    const sess = await code2Session(loginCode);
+    if (!sess.openid) {
+      return { code: 400, msg: sess.errmsg || '获取微信标识失败', data: null };
+    }
+    const ph = await getPhoneNumber(phoneCode);
+    if (!ph.phoneNumber) {
+      return { code: 400, msg: ph.errmsg || '手机号验证失败', data: null };
+    }
+    return this.wxLogin(sess.openid, ph.phoneNumber, nickname, avatarUrl);
+  }
+
+  /**
+   * 微信一键登录：
+   *  - 账号唯一标识为微信 openid；一个 openid 仅能注册一次，永久绑定
+   *  - 登录需验证手机号（phone 必填）
+   *  - 已存在则直接登录；首次使用则自动创建账号
+   */
+  async wxLogin(openid: string, phone: string, nickname?: string, avatarUrl?: string) {
+    if (!openid) return { code: 400, msg: '缺少微信标识', data: null };
+    if (!phone || !/^1\d{10}$/.test(phone)) {
+      return { code: 400, msg: '请先验证手机号', data: null };
+    }
+
+    // 已绑定账号：直接登录
+    const { data: existed } = await this.supabase
+      .from('users')
+      .select('*')
+      .eq('openid', openid)
+      .maybeSingle();
+
+    if (existed) {
+      // 同步手机号/昵称/头像，但不允许改变身份角色
+      const { data: u } = await this.supabase
+        .from('users')
+        .update({ phone, nickname: nickname || existed.nickname, avatar_url: avatarUrl || existed.avatar_url })
+        .eq('id', existed.id)
+        .select()
+        .single();
+      const user = u || existed;
+      return this.buildWxResult(user, '登录成功');
+    }
+
+    // 首次使用：自动注册，username 以 wx_ 前缀 + openid 后段保证唯一且不可再注册
+    const { data: existingSuper } = await this.supabase
+      .from('users')
+      .select('id')
+      .eq('role', 'super')
+      .limit(1);
+    const isFirst = !existingSuper || existingSuper.length === 0;
+
+    const username = `wx_${openid.slice(-16)}`;
+    const password_hash = await bcrypt.hash(openid + JWT_SECRET, 10);
     const { data, error } = await this.supabase
+      .from('users')
+      .insert({
+        username,
+        password_hash,
+        nickname: nickname || '微信宗亲',
+        avatar_url: avatarUrl || null,
+        phone,
+        openid,
+        role: isFirst ? 'super' : 'member',
+      })
+      .select()
+      .single();
+
+    if (error) {
+      return { code: 500, msg: '微信登录失败', data: null };
+    }
+    return this.buildWxResult(data, '注册并登录成功');
+  }
+
+  private buildWxResult(user: any, msg: string) {
+    const token = jwt.sign(
+      { userId: user.id, username: user.username, role: user.role },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+    return {
+      code: 200,
+      msg,
+      data: {
+        user: {
+          id: user.id,
+          username: user.username,
+          nickname: user.nickname,
+          role: user.role,
+          family_id: user.family_id,
+          member_id: user.member_id,
+          phone: user.phone,
+          avatar_url: user.avatar_url,
+        },
+        token,
+      },
+    };
+  }
+
+  async updateProfile(userId: string, updates: { nickname?: string; avatar_url?: string }) {    const { data, error } = await this.supabase
       .from('users')
       .update(updates)
       .eq('id', userId)

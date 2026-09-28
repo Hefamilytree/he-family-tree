@@ -82,14 +82,28 @@ export class AuthController {
     return this.authService.setAdmin(decoded.userId, userId);
   }
 
-  @Post('wechat-login')
+  @Post('wx-login')
   @HttpCode(HttpStatus.OK)
-  async wechatLogin(@Body() body: { code: string; nickname?: string; avatar_url?: string }) {
-    const { code, nickname, avatar_url } = body;
-    if (!code) {
-      return { code: 400, msg: '微信登录 code 不能为空', data: null };
+  async wxLogin(
+    @Body()
+    body: {
+      loginCode?: string;
+      phoneCode?: string;
+      openid?: string;
+      phone?: string;
+      nickname?: string;
+      avatar_url?: string;
     }
-    return this.authService.wechatLogin(code, nickname, avatar_url);
+  ) {
+    const b = body || ({} as any);
+    // 小程序：loginCode + phoneCode 由后端换取 openid 与手机号
+    if (b.loginCode && b.phoneCode) {
+      return this.authService.wxCodeLogin(b.loginCode, b.phoneCode, b.nickname, b.avatar_url);
+    }
+    if (b.openid && b.phone) {
+      return this.authService.wxLogin(b.openid, b.phone, b.nickname, b.avatar_url);
+    }
+    return { code: 400, msg: '缺少微信标识或手机号', data: null };
   }
 
   @Post('link-member')

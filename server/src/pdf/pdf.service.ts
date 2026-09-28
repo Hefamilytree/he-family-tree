@@ -211,18 +211,18 @@ export class PdfService {
       doc.rect(0, 0, PAGE_W, PAGE_H).fill(PAPER);
       doc.rect(0, 0, PAGE_W, PAGE_H).lineWidth(2).strokeColor(INK).stroke();
 
-      // 中央主标题框 cover-title-box：right:26% top:10% width:22% height:80%
-      // 水平 left=509.6 right=725.2；垂直 top=138 bottom=1242；中心 x≈617
-      const boxL = 510;
-      const boxR = 725;
-      const boxT = 138;
+      // 中央主标题框（严格按 A4 模板等比换算到 980×1380）：
+      // 模板双线框 x≈310–441(占宽 0.521–0.741)、y≈86–757(占高 0.102–0.900)
+      const boxL = 511;
+      const boxR = 726;
+      const boxT = 141;
       const boxB = 1242;
       const boxCX = (boxL + boxR) / 2;
 
-      // 主框内竖排：家族名(title-name 小) + 族譜(title-word 大)，整体居中于框中央一列
+      // 主框内竖排：族譜大字（模板框中竖排 5 字），整体居中于框中央一列
       const titleText = `${family.family_name || shiName}族譜`;
-      const tFs = boxR - boxL < 230 ? 60 : 66;
-      const stepT = tFs * 1.75;
+      const tFs = 52;
+      const stepT = tFs * 1.72;
       const totalH = Array.from(titleText).length * stepT;
       // 字左边使列中心 = 框中心
       const tX = boxCX - tFs / 2;
@@ -232,18 +232,12 @@ export class PdfService {
       doc.rect(boxL + 10, boxT + 10, boxR - boxL - 20, boxB - boxT - 20).stroke();
       drawVertical(doc, titleText, { rightX: tX, leftX: boxL, topY: tTop, bottomY: boxB, fontSize: tFs, color: '#111111' });
 
-      // 右侧堂号 cover-hall：right:12% top:20% → 字左边≈862-42=820，顶部 y=276
-      if (hall) drawVertical(doc, hall, { rightX: 820, leftX: 745, topY: 276, bottomY: 700, fontSize: 42, color: '#111111' });
+      // 堂号列：模板右侧竖排小字列 x≈500–523 → 换算 x≈825–862，从 y≈287 起向下
+      if (hall) drawVertical(doc, hall, { rightX: 858, leftX: 812, topY: 287, bottomY: 1000, fontSize: 32, color: '#111111' });
 
-      // 框左侧上部副文 cover-sub-1 宗族源远：left:34% top:32% → x=333, y=442
-      drawVertical(doc, '宗族源远', { rightX: 333, leftX: 280, topY: 442, bottomY: 660, fontSize: 28, color: '#111111' });
-
-      // 框左侧下部副文 cover-sub-2 世代绵延：left:34% top:62% → x=333, y=856
-      drawVertical(doc, '世代绵延', { rightX: 333, leftX: 280, topY: 856, bottomY: 1080, fontSize: 28, color: '#111111' });
-
-      // 左下重修纪年 cover-date：left:16% bottom:14% → 字左边 x=157，向上排，底缘 y=1187
+      // 左下重修纪年：模板无明显左列副文，仅保留纪年（底缘偏下）
       const dateText = `${ganzhi}年重修`;
-      drawVertical(doc, dateText, { rightX: 157, leftX: 80, topY: 1187 - Array.from(dateText).length * 56, bottomY: 1187, fontSize: 32, color: '#111111' });
+      drawVertical(doc, dateText, { rightX: 170, leftX: 100, topY: 1187 - Array.from(dateText).length * 54, bottomY: 1187, fontSize: 30, color: '#111111' });
     }
 
     // ===== 2. 前言（封面之后、目录之前） =====

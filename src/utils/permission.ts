@@ -50,6 +50,38 @@ export function isSuper(u: AuthUser | null): boolean {
   return (u?.role || '').toLowerCase() === 'super'
 }
 
+/** 轻量成员结构（用于亲属关系判定） */
+export interface KinMember {
+  id: string
+  parent_id?: string | null
+}
+
+/**
+ * 是否可维护某成员信息：
+ *  - 管理人员及以上：可维护全部
+ *  - 所有登录成员：可维护【本人、父母、子女】
+ *    · 本人：memberId === 用户.member_id
+ *    · 父母：目标成员的 parent_id 指向本人 或 本人的 parent_id 指向目标成员
+ *    · 子女：目标成员的 parent_id === 本人
+ *  @param allMembers 用于判定子女关系的成员集合
+ */
+export function canManageMember(
+  u: AuthUser | null,
+  target: KinMember,
+  allMembers: KinMember[] = [],
+): boolean {
+  if (permissionLevel(u) >= 3) return true
+  if (!u || !u.member_id) return false
+  const me = u.member_id
+  // 本人
+  if (target.id === me) return true
+  // 父母：我是目标的子女（target 是我的父辈）
+  if (target.id && allMembers.find((m) => m.id === me)?.parent_id === target.id) return true
+  // 子女：目标的父亲是我
+  if (target.parent_id === me) return true
+  return false
+}
+
 /** 读取当前登录用户（未登录返回 null） */
 export function getAuthUser(): AuthUser | null {
   const token = Taro.getStorageSync('token')
@@ -65,10 +97,12 @@ export function logout(): void {
 
 /**
  * 是否可查看指定板块：
- *  - 游客 / 未认证宗亲：仅 文化传承、孝亲睦族
+ *  - 供需信息、产品展示：对外开放，全部用户（含游客）均可查看
+ *  - 游客 / 未认证宗亲：另可查看 文化传承、孝亲睦族
  *  - 认证宗亲及以上：所有板块可查看
  */
 export function canViewBlock(u: AuthUser | null, block: BlockKey): boolean {
+  if (block === 'supply' || block === 'product') return true
   if (permissionLevel(u) >= 2) return true
   return block === 'cultural' || block === 'harmony'
 }
