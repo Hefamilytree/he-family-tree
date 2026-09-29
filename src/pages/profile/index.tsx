@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { View, Text } from '@tarojs/components';
 import Taro, { useLoad, useDidShow } from '@tarojs/taro';
-import { User, Heart, LogIn, LogOut, Shield, UserPlus, Trash2, House, HandHeart, Check, X, Send } from 'lucide-react-taro';
+import { User, Heart, LogIn, LogOut, Shield, UserPlus, Trash2, House, HandHeart, Check, X, Send, Phone, Smartphone, RefreshCw, KeyRound } from 'lucide-react-taro';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -87,6 +87,33 @@ const ProfilePage = () => {
   const [showAdminInbox, setShowAdminInbox] = useState(false);
   const [adminApps, setAdminApps] = useState<any[]>([]);
   const [reviewingId, setReviewingId] = useState('');
+
+  // ===== 账号与安全：手机号绑定 / 更换 / 微信账号迁移 =====
+  const [showAccountDialog, setShowAccountDialog] = useState(false);
+  // 手机号绑定（新绑）
+  const [bindPhone, setBindPhone] = useState('');
+  const [bindCode, setBindCode] = useState('');
+  const [sendBindBtn, setSendBindBtn] = useState('获取验证码');
+  const [bindLoading, setBindLoading] = useState(false);
+  // 更换手机号
+  const [showChangePhone, setShowChangePhone] = useState(false);
+  const [oldPhone, setOldPhone] = useState('');
+  const [newPhone, setNewPhone] = useState('');
+  const [changeCode, setChangeCode] = useState('');
+  const [changeLoading, setChangeLoading] = useState(false);
+  // 微信账号迁移
+  const [showMigrate, setShowMigrate] = useState(false);
+  const [migratePhone, setMigratePhone] = useState('');
+  const [migrateCode, setMigrateCode] = useState('');
+  const [migrateReason, setMigrateReason] = useState('');
+  const [migrateMode, setMigrateMode] = useState<'sms' | 'apply'>('sms');
+  const [migrateLoading, setMigrateLoading] = useState(false);
+  // 管理员：协助改手机号与迁移审核
+  const [showAdminMigrateReview, setShowAdminMigrateReview] = useState(false);
+  const [migrateApps, setMigrateApps] = useState<any[]>([]);
+  const [sortUid, setSortUid] = useState('');
+  const [adminNewPhone, setAdminNewPhone] = useState('');
+  const [adminPhoneSubmit, setAdminPhoneSubmit] = useState(false);
 
   useLoad(() => {
     console.log('ProfilePage loaded');
@@ -475,6 +502,332 @@ const ProfilePage = () => {
     }
   };
 
+  // ===== 手机号绑定 =====
+  const sendBindSms = async () => {
+    if (!/^1\d{10}$/.test(bindPhone.trim())) {
+      Taro.showToast({ title: '请填写正确的手机号', icon: 'none' });
+      return;
+    }
+    try {
+      const token = Taro.getStorageSync('token');
+      const res = await Network.request({
+        url: '/api/auth/sms-code',
+        method: 'POST',
+        data: { phone: bindPhone.trim(), purpose: 'bind' },
+        header: { Authorization: `Bearer ${token}` },
+      });
+      console.log('发送验证码:', res.data);
+      if (res.data?.code === 200) {
+        Taro.showToast({ title: '验证码已发送', icon: 'success' });
+        let n = 60;
+        setSendBindBtn(`${n}s`);
+        const timer = setInterval(() => {
+          n -= 1;
+          if (n <= 0) {
+            clearInterval(timer);
+            setSendBindBtn('获取验证码');
+          } else {
+            setSendBindBtn(`${n}s`);
+          }
+        }, 1000);
+      } else {
+        Taro.showToast({ title: res.data?.msg || '发送失败', icon: 'none' });
+      }
+    } catch (e) {
+      console.error('发送验证码失败:', e);
+      Taro.showToast({ title: '网络错误', icon: 'none' });
+    }
+  };
+
+  const handleBindPhone = async () => {
+    if (!/^1\d{10}$/.test(bindPhone.trim())) {
+      Taro.showToast({ title: '请填写正确的手机号', icon: 'none' });
+      return;
+    }
+    if (!bindCode.trim()) {
+      Taro.showToast({ title: '请填写验证码', icon: 'none' });
+      return;
+    }
+    setBindLoading(true);
+    try {
+      const token = Taro.getStorageSync('token');
+      const res = await Network.request({
+        url: '/api/auth/bind-phone',
+        method: 'POST',
+        data: { phone: bindPhone.trim(), code: bindCode.trim() },
+        header: { Authorization: `Bearer ${token}` },
+      });
+      console.log('绑定手机号:', res.data);
+      if (res.data?.code === 200) {
+        const updated = { ...userInfo, phone: bindPhone.trim() };
+        setUserInfo(updated);
+        Taro.setStorageSync('userInfo', updated);
+        setShowAccountDialog(false);
+        setBindPhone('');
+        setBindCode('');
+        Taro.showToast({ title: '绑定成功', icon: 'success' });
+      } else {
+        Taro.showToast({ title: res.data?.msg || '绑定失败', icon: 'none' });
+      }
+    } catch (e) {
+      console.error('绑定失败:', e);
+      Taro.showToast({ title: '网络错误', icon: 'none' });
+    } finally {
+      setBindLoading(false);
+    }
+  };
+
+  // ===== 更换手机号 =====
+  const sendChangeSms = async (phone: string) => {
+    if (!/^1\d{10}$/.test(phone.trim())) {
+      Taro.showToast({ title: '请填写正确的手机号', icon: 'none' });
+      return false;
+    }
+    try {
+      const token = Taro.getStorageSync('token');
+      const res = await Network.request({
+        url: '/api/auth/sms-code',
+        method: 'POST',
+        data: { phone: phone.trim(), purpose: 'change' },
+        header: { Authorization: `Bearer ${token}` },
+      });
+      if (res.data?.code === 200) {
+        Taro.showToast({ title: '验证码已发送', icon: 'success' });
+        return true;
+      }
+      Taro.showToast({ title: res.data?.msg || '发送失败', icon: 'none' });
+      return false;
+    } catch (e) {
+      console.error('发送验证码失败:', e);
+      Taro.showToast({ title: '网络错误', icon: 'none' });
+      return false;
+    }
+  };
+
+  const handleChangePhone = async () => {
+    if (!/^1\d{10}$/.test(oldPhone.trim())) {
+      Taro.showToast({ title: '请填写原手机号', icon: 'none' });
+      return;
+    }
+    if (!/^1\d{10}$/.test(newPhone.trim())) {
+      Taro.showToast({ title: '请填写新手机号', icon: 'none' });
+      return;
+    }
+    if (!changeCode.trim()) {
+      Taro.showToast({ title: '请填写验证码', icon: 'none' });
+      return;
+    }
+    setChangeLoading(true);
+    try {
+      const token = Taro.getStorageSync('token');
+      const res = await Network.request({
+        url: '/api/auth/change-phone',
+        method: 'POST',
+        data: { oldPhone: oldPhone.trim(), newPhone: newPhone.trim(), code: changeCode.trim() },
+        header: { Authorization: `Bearer ${token}` },
+      });
+      console.log('更换手机号:', res.data);
+      if (res.data?.code === 200) {
+        const updated = { ...userInfo, phone: newPhone.trim() };
+        setUserInfo(updated);
+        Taro.setStorageSync('userInfo', updated);
+        setShowChangePhone(false);
+        setOldPhone('');
+        setNewPhone('');
+        setChangeCode('');
+        Taro.showToast({ title: '更换成功', icon: 'success' });
+      } else {
+        Taro.showToast({ title: res.data?.msg || '更换失败', icon: 'none' });
+      }
+    } catch (e) {
+      console.error('更换失败:', e);
+      Taro.showToast({ title: '网络错误', icon: 'none' });
+    } finally {
+      setChangeLoading(false);
+    }
+  };
+
+  // ===== 微信账号迁移 =====
+  const openMigrate = () => {
+    setMigratePhone('');
+    setMigrateCode('');
+    setMigrateReason('');
+    setMigrateMode('sms');
+    setShowMigrate(true);
+  };
+
+  const sendMigrateSms = async () => {
+    if (!/^1\d{10}$/.test(migratePhone.trim())) {
+      Taro.showToast({ title: '请填写原手机号', icon: 'none' });
+      return;
+    }
+    try {
+      const token = Taro.getStorageSync('token');
+      const res = await Network.request({
+        url: '/api/auth/sms-code',
+        method: 'POST',
+        data: { phone: migratePhone.trim(), purpose: 'migrate' },
+        header: { Authorization: `Bearer ${token}` },
+      });
+      if (res.data?.code === 200) {
+        Taro.showToast({ title: '验证码已发送', icon: 'success' });
+      } else {
+        Taro.showToast({ title: res.data?.msg || '发送失败', icon: 'none' });
+      }
+    } catch (e) {
+      console.error('发送验证码失败:', e);
+      Taro.showToast({ title: '网络错误', icon: 'none' });
+    }
+  };
+
+  const confirmMigrate = async () => {
+    const isSuperAct = userInfo?.role === 'super';
+    const doMigrate = async () => {
+      setMigrateLoading(true);
+      try {
+        const token = Taro.getStorageSync('token');
+        const url =
+          migrateMode === 'sms'
+            ? '/api/auth/migrate'
+            : '/api/auth/migrate-apply';
+        const data =
+          migrateMode === 'sms'
+            ? { phone: migratePhone.trim(), code: migrateCode.trim() }
+            : { phone: migratePhone.trim(), reason: migrateReason.trim() };
+        const res = await Network.request({
+          url,
+          method: 'POST',
+          data,
+          header: { Authorization: `Bearer ${token}` },
+        });
+        console.log('迁移响应:', res.data);
+        if (res.data?.code === 200) {
+          setShowMigrate(false);
+          Taro.showToast({
+            title: migrateMode === 'sms' ? '迁移成功' : '申请已提交，等待审核',
+            icon: 'success',
+          });
+          // 迁移成功后提示重新登录
+          if (migrateMode === 'sms') {
+            setTimeout(() => {
+              Taro.removeStorageSync('token');
+              Taro.removeStorageSync('userInfo');
+              Taro.reLaunch({ url: '/pages/login/index' });
+            }, 1500);
+          }
+        } else {
+          Taro.showToast({ title: res.data?.msg || '操作失败', icon: 'none' });
+        }
+      } catch (e) {
+        console.error('迁移失败:', e);
+        Taro.showToast({ title: '网络错误', icon: 'none' });
+      } finally {
+        setMigrateLoading(false);
+      }
+    };
+
+    // 主管理员迁移：二次确认
+    if (isSuperAct) {
+      Taro.showModal({
+        title: '迁移主管理员账号',
+        content:
+          '您正在迁移主管理人员账号身份。迁移后管理权限将转移给新微信账号，需谨慎操作。确定继续吗？',
+        confirmColor: '#c53030',
+        success: (r) => {
+          if (r.confirm) doMigrate();
+        },
+      });
+    } else {
+      doMigrate();
+    }
+  };
+
+  // ===== 管理员：协助改手机号 =====
+  const handleAdminChangePhone = async () => {
+    if (!sortUid.trim()) {
+      Taro.showToast({ title: '请填写成员用户ID', icon: 'none' });
+      return;
+    }
+    if (!/^1\d{10}$/.test(adminNewPhone.trim())) {
+      Taro.showToast({ title: '请填写正确的新手机号', icon: 'none' });
+      return;
+    }
+    setAdminPhoneSubmit(true);
+    try {
+      const token = Taro.getStorageSync('token');
+      const res = await Network.request({
+        url: '/api/auth/admin-change-phone',
+        method: 'POST',
+        data: { targetUserId: sortUid.trim(), newPhone: adminNewPhone.trim() },
+        header: { Authorization: `Bearer ${token}` },
+      });
+      console.log('管理员改手机号:', res.data);
+      if (res.data?.code === 200) {
+        Taro.showToast({ title: '已协助修改', icon: 'success' });
+        setAdminNewPhone('');
+      } else {
+        Taro.showToast({ title: res.data?.msg || '操作失败', icon: 'none' });
+      }
+    } catch (e) {
+      console.error('操作失败:', e);
+      Taro.showToast({ title: '网络错误', icon: 'none' });
+    } finally {
+      setAdminPhoneSubmit(false);
+    }
+  };
+
+  // ===== 管理员：迁移审核 =====
+  const loadMigrateApps = async () => {
+    try {
+      const token = Taro.getStorageSync('token');
+      const res = await Network.request({
+        url: '/api/auth/migrate-apps',
+        method: 'GET',
+        header: { Authorization: `Bearer ${token}` },
+      });
+      console.log('迁移审核列表:', res.data);
+      if (res.data?.code === 200) {
+        setMigrateApps(res.data.data || []);
+      } else {
+        setMigrateApps([]);
+      }
+    } catch (e) {
+      console.error('加载迁移申请失败:', e);
+      setMigrateApps([]);
+    }
+  };
+
+  const openAdminMigrateReview = async () => {
+    if (!isLoggedIn) {
+      Taro.showToast({ title: '请先登录', icon: 'none' });
+      return;
+    }
+    setShowAdminMigrateReview(true);
+    await loadMigrateApps();
+  };
+
+  const handleReviewMigration = async (appId: string, approve: boolean) => {
+    try {
+      const token = Taro.getStorageSync('token');
+      const res = await Network.request({
+        url: '/api/auth/migrate-review',
+        method: 'POST',
+        data: { appId, approve },
+        header: { Authorization: `Bearer ${token}` },
+      });
+      console.log('审核迁移:', res.data);
+      if (res.data?.code === 200) {
+        Taro.showToast({ title: approve ? '已通过迁移' : '已驳回', icon: 'success' });
+        await loadMigrateApps();
+      } else {
+        Taro.showToast({ title: res.data?.msg || '操作失败', icon: 'none' });
+      }
+    } catch (e) {
+      console.error('审核失败:', e);
+      Taro.showToast({ title: '网络错误', icon: 'none' });
+    }
+  };
+
   return (
     <View className="min-h-screen bg-amber-50">
       {/* 用户信息区域 */}
@@ -594,6 +947,33 @@ const ProfilePage = () => {
           </Card>
         )}
 
+
+        <Card
+          className="bg-stone-50 border-stone-200 active:opacity-80"
+          onClick={() => {
+            if (!isLoggedIn) {
+              Taro.showToast({ title: '请先登录', icon: 'none' });
+              return;
+            }
+            setShowAccountDialog(true);
+          }}
+        >
+          <CardContent className="p-4 flex items-center gap-3">
+            <View className="w-10 h-10 rounded-full bg-stone-700 flex items-center justify-center">
+              <Phone size={20} color="#FFFDF7" />
+            </View>
+            <View className="flex-1">
+              <Text className="block text-base font-semibold text-stone-800">
+                账号与安全
+              </Text>
+              <Text className="block text-sm text-stone-500">
+                {userInfo?.phone
+                  ? `已绑定：${userInfo.phone}（点击管理手机号 / 微信账号）`
+                  : '绑定手机号，用于族人联络与账号找回'}
+              </Text>
+            </View>
+          </CardContent>
+        </Card>
 
         <Card
           className="bg-red-900 border-red-800 text-white active:opacity-80"
@@ -812,6 +1192,449 @@ const ProfilePage = () => {
                 <Text>{linking ? '提交中...' : '完成宗亲认证'}</Text>
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ===== 账号与安全弹窗 ===== */}
+      <Dialog open={showAccountDialog} onOpenChange={setShowAccountDialog}>
+        <DialogContent className="bg-[#FFFDF7] rounded-2xl max-h-[86vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield size={20} color="#134E4A" />
+              <Text>账号与安全</Text>
+            </DialogTitle>
+            <DialogDescription>
+              <Text className="block">
+                管理您的绑定手机号与微信登录账号。登录仅需微信标识，手机号为登录后的可选绑定。
+              </Text>
+            </DialogDescription>
+          </DialogHeader>
+
+          <View className="flex flex-col gap-3">
+            {/* 手机号展示 */}
+            <View className="bg-white border border-stone-200 rounded-xl px-4 py-3 flex flex-row items-center justify-between">
+              <View className="flex flex-row items-center gap-2">
+                <Phone size={16} color="#6B5B4F" />
+                <Text className="block text-sm text-stone-700">
+                  {userInfo?.phone ? `当前手机号：${userInfo.phone}` : '未绑定手机号'}
+                </Text>
+              </View>
+              {userInfo?.phone && (
+                <Badge className="bg-emerald-100 text-emerald-700">
+                  <Text>已绑定</Text>
+                </Badge>
+              )}
+            </View>
+
+            {/* 绑定手机号 */}
+            {!userInfo?.phone && (
+              <View className="bg-white border border-stone-200 rounded-xl p-4 flex flex-col gap-2">
+                <Text className="block text-sm font-semibold text-stone-700">绑定手机号</Text>
+                <View className="flex flex-row gap-2">
+                  <View className="flex-1 bg-stone-50 rounded-xl px-3 py-2">
+                    <Input
+                      className="w-full"
+                      type="number"
+                      maxlength={11}
+                      value={bindPhone}
+                      placeholder="11位手机号"
+                      onInput={(e) => setBindPhone(e.detail.value)}
+                    />
+                  </View>
+                  <Button size="sm" variant="outline" onClick={sendBindSms}>
+                    <Text>{sendBindBtn}</Text>
+                  </Button>
+                </View>
+                <View className="flex flex-row gap-2">
+                  <View className="flex-1 bg-stone-50 rounded-xl px-3 py-2">
+                    <Input
+                      className="w-full"
+                      type="number"
+                      maxlength={6}
+                      value={bindCode}
+                      placeholder="短信验证码"
+                      onInput={(e) => setBindCode(e.detail.value)}
+                    />
+                  </View>
+                  <Button
+                    size="sm"
+                    className="bg-teal-800 text-white"
+                    disabled={bindLoading}
+                    onClick={handleBindPhone}
+                  >
+                    <Text>{bindLoading ? '绑定中...' : '绑定'}</Text>
+                  </Button>
+                </View>
+              </View>
+            )}
+
+            {/* 更换手机号 */}
+            {userInfo?.phone && (
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  setOldPhone(userInfo.phone);
+                  setNewPhone('');
+                  setChangeCode('');
+                  setShowChangePhone(true);
+                }}
+              >
+                <RefreshCw size={16} color="#6B5B4F" />
+                <Text className="text-sm">更换手机号</Text>
+              </Button>
+            )}
+
+            {/* 微信账号迁移 */}
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={openMigrate}
+            >
+              <Smartphone size={16} color="#6B5B4F" />
+              <Text className="text-sm">迁移微信账号</Text>
+            </Button>
+
+            {/* 管理员：协助修改手机号 + 迁移审核 */}
+            {isAdmin(userInfo) && (
+              <View className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex flex-col gap-3">
+                <Text className="block text-sm font-semibold text-stone-700">管理功能</Text>
+                <View className="flex flex-row gap-2">
+                  <View className="flex-1 bg-stone-50 rounded-xl px-3 py-2">
+                    <Input
+                      className="w-full"
+                      value={sortUid}
+                      placeholder="成员用户ID（协助改手机号）"
+                      onInput={(e) => setSortUid(e.detail.value)}
+                    />
+                  </View>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      if (!sortUid.trim()) {
+                        Taro.showToast({ title: '请填写成员用户ID', icon: 'none' });
+                        return;
+                      }
+                      setShowChangePhone(true);
+                    }}
+                  >
+                    <Text>改号</Text>
+                  </Button>
+                </View>
+                <Button
+                  className="w-full bg-amber-700 text-white"
+                  onClick={openAdminMigrateReview}
+                >
+                  <KeyRound size={16} color="#FFFDF7" />
+                  <Text className="text-sm">迁移人工审核</Text>
+                </Button>
+              </View>
+            )}
+          </View>
+
+          <DialogFooter>
+            <Button
+              className="bg-stone-200 text-stone-700"
+              onClick={() => setShowAccountDialog(false)}
+            >
+              <Text>关闭</Text>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 更换手机号弹窗 */}
+      <Dialog open={showChangePhone} onOpenChange={setShowChangePhone}>
+        <DialogContent className="bg-[#FFFDF7] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              <Text className="block text-lg font-bold text-stone-800">
+                {userInfo?.role === 'admin' || userInfo?.role === 'super'
+                  ? sortUid
+                    ? '管理员协助更换手机号'
+                    : '更换手机号'
+                  : '更换手机号'}
+              </Text>
+            </DialogTitle>
+          </DialogHeader>
+
+          <View className="space-y-3 mt-2">
+            {sortUid ? (
+              <View>
+                <Label><Text className="block text-sm text-stone-600 mb-1">新手机号</Text></Label>
+                <Input
+                  className="bg-stone-50"
+                  type="number"
+                  maxlength={11}
+                  value={adminNewPhone}
+                  placeholder="请输入新手机号"
+                  onInput={(e) => setAdminNewPhone(e.detail.value)}
+                />
+              </View>
+            ) : (
+              <>
+                <View>
+                  <Label><Text className="block text-sm text-stone-600 mb-1">原手机号</Text></Label>
+                  <Input
+                    className="bg-stone-50"
+                    type="number"
+                    maxlength={11}
+                    value={oldPhone}
+                    placeholder="请输入原手机号"
+                    onInput={(e) => setOldPhone(e.detail.value)}
+                  />
+                </View>
+                <View>
+                  <Label><Text className="block text-sm text-stone-600 mb-1">新手机号</Text></Label>
+                  <View className="flex flex-row gap-2 items-end">
+                    <View className="flex-1 bg-stone-50 rounded-xl px-3 py-2">
+                      <Input
+                        className="w-full"
+                        type="number"
+                        maxlength={11}
+                        value={newPhone}
+                        placeholder="请输入新手机号"
+                        onInput={(e) => setNewPhone(e.detail.value)}
+                      />
+                    </View>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={async () => {
+                        if (await sendChangeSms(newPhone)) {
+                          Taro.showToast({ title: '验证码已发送', icon: 'success' });
+                        }
+                      }}
+                    >
+                      <Text>获取验证码</Text>
+                    </Button>
+                  </View>
+                </View>
+                <View>
+                  <Label><Text className="block text-sm text-stone-600 mb-1">短信验证码</Text></Label>
+                  <Input
+                    className="bg-stone-50"
+                    type="number"
+                    maxlength={6}
+                    value={changeCode}
+                    placeholder="请输入新手机号收到的验证码"
+                    onInput={(e) => setChangeCode(e.detail.value)}
+                  />
+                </View>
+              </>
+            )}
+          </View>
+
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setShowChangePhone(false)}>
+              <Text>取消</Text>
+            </Button>
+            <Button
+              className="bg-teal-800 text-white"
+              disabled={changeLoading || adminPhoneSubmit}
+              onClick={() => {
+                if (sortUid) {
+                  handleAdminChangePhone();
+                } else {
+                  handleChangePhone();
+                }
+              }}
+            >
+              <Text>确认更换</Text>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 微信账号迁移弹窗 */}
+      <Dialog open={showMigrate} onOpenChange={setShowMigrate}>
+        <DialogContent className="bg-[#FFFDF7] rounded-2xl max-h-[86vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Smartphone size={20} color="#134E4A" />
+              <Text>迁移微信账号</Text>
+            </DialogTitle>
+            <DialogDescription>
+              <Text className="block">
+                已在新微信登录本小程序后，可将原家族的宗亲身份、权限与族谱数据迁移到新微信账号。请选择核验方式。
+              </Text>
+            </DialogDescription>
+          </DialogHeader>
+
+          <View className="flex flex-col gap-3">
+            <View className="bg-white border border-stone-200 rounded-xl px-4 py-3 flex flex-row items-center justify-between">
+              <View className="flex flex-row items-center gap-2">
+                <Smartphone size={16} color="#6B5B4F" />
+                <Text className="block text-sm text-stone-700">
+                  当前微信：{userInfo?.nickname || userInfo?.username}（将接收原家族数据）
+                </Text>
+              </View>
+            </View>
+
+            {/* 核验方式切换 */}
+            <View className="bg-stone-100 rounded-xl p-1 flex flex-row">
+              {(['sms', 'apply'] as const).map((m) => (
+                <Button
+                  key={m}
+                  variant={migrateMode === m ? 'default' : 'ghost'}
+                  className={
+                    migrateMode === m
+                      ? 'flex-1 bg-teal-800 text-white'
+                      : 'flex-1 text-stone-600'
+                  }
+                  onClick={() => setMigrateMode(m)}
+                >
+                  <Text className="text-sm">
+                    {m === 'sms' ? '原手机号可用' : '原手机号已不可用'}
+                  </Text>
+                </Button>
+              ))}
+            </View>
+
+            {/* 原手机号 */}
+            <View>
+              <Label><Text className="block text-sm text-stone-600 mb-1">原家族绑定手机号 *</Text></Label>
+              <Input
+                className="bg-stone-50"
+                type="number"
+                maxlength={11}
+                value={migratePhone}
+                placeholder="请输入原家族账号绑定的手机号"
+                onInput={(e) => setMigratePhone(e.detail.value)}
+              />
+            </View>
+
+            {migrateMode === 'sms' ? (
+              <View>
+                <Label><Text className="block text-sm text-stone-600 mb-1">短信验证码</Text></Label>
+                <View className="flex flex-row gap-2 items-end">
+                  <View className="flex-1 bg-stone-50 rounded-xl px-3 py-2">
+                    <Input
+                      className="w-full"
+                      type="number"
+                      maxlength={6}
+                      value={migrateCode}
+                      placeholder="原手机号收到的验证码"
+                      onInput={(e) => setMigrateCode(e.detail.value)}
+                    />
+                  </View>
+                  <Button size="sm" variant="outline" onClick={sendMigrateSms}>
+                    <Text>获取验证码</Text>
+                  </Button>
+                </View>
+              </View>
+            ) : (
+              <View>
+                <Label><Text className="block text-sm text-stone-600 mb-1">迁移原因说明</Text></Label>
+                <View className="bg-stone-50 rounded-xl px-3 py-2">
+                  <Textarea
+                    style={{ width: '100%', minHeight: '70px', backgroundColor: 'transparent' }}
+                    maxlength={200}
+                    value={migrateReason}
+                    placeholder="如原手机号已停用，请说明情况，由管理员人工审核"
+                    onInput={(e) => setMigrateReason(e.detail.value)}
+                  />
+                </View>
+                <Text className="block text-xs text-stone-400 mt-1">
+                  提交后需家族管理员审核通过方可迁移。主管理员迁移将二次确认。
+                </Text>
+              </View>
+            )}
+
+            <View className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+              <Text className="block text-xs leading-5 text-amber-800">
+                迁移核验通过后：原微信账号将解绑，您在新的微信登录即可看到原家族全部成员信息、宗亲身份与权限；迁移操作将全程记录日志。
+              </Text>
+            </View>
+          </View>
+
+          <DialogFooter className="mt-2">
+            <Button
+              className="bg-stone-200 text-stone-700"
+              onClick={() => setShowMigrate(false)}
+            >
+              <Text>取消</Text>
+            </Button>
+            <Button
+              className="bg-teal-800 text-white"
+              disabled={migrateLoading}
+              onClick={confirmMigrate}
+            >
+              <Text>{migrateLoading ? '处理中...' : migrateMode === 'sms' ? '验证并迁移' : '提交审核申请'}</Text>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 管理员：迁移人工审核弹窗 */}
+      <Dialog open={showAdminMigrateReview} onOpenChange={setShowAdminMigrateReview}>
+        <DialogContent className="bg-[#FFFDF7] rounded-2xl max-h-[86vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound size={20} color="#134E4A" />
+              <Text>迁移人工审核</Text>
+            </DialogTitle>
+            <DialogDescription>
+              <Text className="block">
+                审核族人微信账号迁移申请，通过后将原家族身份与数据迁移至新微信。
+              </Text>
+            </DialogDescription>
+          </DialogHeader>
+
+          {migrateApps.length === 0 ? (
+            <View className="py-10 flex flex-col items-center gap-2">
+              <Text className="block text-sm text-stone-400">
+                暂无待审核的迁移申请
+              </Text>
+            </View>
+          ) : (
+            <View className="flex flex-col gap-3">
+              {migrateApps.map((it) => (
+                <View key={it.id} className="bg-white border border-stone-200 rounded-xl p-4 flex flex-col gap-2">
+                  <Text className="block text-base font-semibold text-stone-800">
+                    原手机号：{it.phone || '-'}
+                  </Text>
+                  <Text className="block text-sm text-stone-600">
+                    申请人：{it.submitted_by ? '（已登录用户发起）' : '-'}
+                  </Text>
+                  {it.reason && (
+                    <Text className="block text-sm text-stone-500">
+                      原因：{it.reason}
+                    </Text>
+                  )}
+                  <Text className="block text-sm text-stone-500">
+                    {it.created_at ? `提交时间：${new Date(it.created_at).toLocaleString()}` : ''}
+                  </Text>
+                  <View className="flex flex-row gap-2 mt-1">
+                    <Button
+                      className="flex-1 bg-emerald-700 text-white"
+                      onClick={() => handleReviewMigration(it.id, true)}
+                    >
+                      <Check size={16} color="#FFFDF7" />
+                      <Text>通过并迁移</Text>
+                    </Button>
+                    <Button
+                      className="flex-1 bg-red-700 text-white"
+                      onClick={() => handleReviewMigration(it.id, false)}
+                    >
+                      <X size={16} color="#FFFDF7" />
+                      <Text>驳回</Text>
+                    </Button>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+
+          <DialogFooter>
+            <Button
+              className="bg-stone-200 text-stone-700"
+              onClick={() => setShowAdminMigrateReview(false)}
+            >
+              <Text>关闭</Text>
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -84,26 +84,103 @@ export class AuthController {
 
   @Post('wx-login')
   @HttpCode(HttpStatus.OK)
-  async wxLogin(
-    @Body()
-    body: {
-      loginCode?: string;
-      phoneCode?: string;
-      openid?: string;
-      phone?: string;
-      nickname?: string;
-      avatar_url?: string;
-    }
-  ) {
+  async wxLogin(@Body() body: { loginCode?: string; openid?: string; nickname?: string; avatar_url?: string }) {
     const b = body || ({} as any);
-    // 小程序：loginCode + phoneCode 由后端换取 openid 与手机号
-    if (b.loginCode && b.phoneCode) {
-      return this.authService.wxCodeLogin(b.loginCode, b.phoneCode, b.nickname, b.avatar_url);
+    // 登录仅需 openid：loginCode 由后端 wx.login 换取 openid；不强制手机号授权
+    if (b.loginCode) {
+      return this.authService.wechatLogin(b.loginCode, b.nickname, b.avatar_url);
     }
-    if (b.openid && b.phone) {
-      return this.authService.wxLogin(b.openid, b.phone, b.nickname, b.avatar_url);
+    if (b.openid) {
+      return this.authService.loginByOpenid(b.openid, b.nickname, b.avatar_url);
     }
-    return { code: 400, msg: '缺少微信标识或手机号', data: null };
+    return { code: 400, msg: '缺少微信标识(openid/logincode)', data: null };
+  }
+
+  @Post('sms-code')
+  @HttpCode(HttpStatus.OK)
+  async smsCode(@Body() body: { phone: string; purpose?: string }) {
+    if (!body || !body.phone) return { code: 400, msg: '请填写手机号', data: null };
+    return this.authService.sendSmsCode(body.phone, body.purpose || 'bind');
+  }
+
+  @Post('bind-phone')
+  @HttpCode(HttpStatus.OK)
+  async bindPhone(
+    @Headers('authorization') authorization: string,
+    @Body() body: { phone: string; code: string }
+  ) {
+    const decoded = this.authService.requireAuth(authorization);
+    if ((decoded as any).code) return decoded;
+    if (!body?.phone || !body?.code) return { code: 400, msg: '参数不完整', data: null };
+    return this.authService.bindPhone(decoded.userId, body.phone, body.code);
+  }
+
+  @Post('change-phone')
+  @HttpCode(HttpStatus.OK)
+  async changePhone(
+    @Headers('authorization') authorization: string,
+    @Body() body: { oldPhone: string; newPhone: string; code: string }
+  ) {
+    const decoded = this.authService.requireAuth(authorization);
+    if ((decoded as any).code) return decoded;
+    if (!body?.oldPhone || !body?.newPhone || !body?.code) return { code: 400, msg: '参数不完整', data: null };
+    return this.authService.changePhone(decoded.userId, body.oldPhone, body.newPhone, body.code);
+  }
+
+  @Post('admin-change-phone')
+  @HttpCode(HttpStatus.OK)
+  async adminChangePhone(
+    @Headers('authorization') authorization: string,
+    @Body() body: { targetUserId: string; newPhone: string }
+  ) {
+    const decoded = this.authService.requireAuth(authorization);
+    if ((decoded as any).code) return decoded;
+    if (!body?.targetUserId || !body?.newPhone) return { code: 400, msg: '参数不完整', data: null };
+    return this.authService.adminChangePhone(decoded.userId, body.targetUserId, body.newPhone);
+  }
+
+  @Post('migrate')
+  @HttpCode(HttpStatus.OK)
+  async migrate(
+    @Headers('authorization') authorization: string,
+    @Body() body: { phone: string; code?: string }
+  ) {
+    const decoded = this.authService.requireAuth(authorization);
+    if ((decoded as any).code) return decoded;
+    if (!body?.phone) return { code: 400, msg: '请填写原手机号', data: null };
+    return this.authService.migrateAccount(decoded.userId, body.phone, body.code);
+  }
+
+  @Post('migrate-apply')
+  @HttpCode(HttpStatus.OK)
+  async migrateApply(
+    @Headers('authorization') authorization: string,
+    @Body() body: { phone: string; reason?: string }
+  ) {
+    const decoded = this.authService.requireAuth(authorization);
+    if ((decoded as any).code) return decoded;
+    if (!body?.phone) return { code: 400, msg: '请填写原手机号', data: null };
+    return this.authService.applyMigration(decoded.userId, body.phone, body.reason || '');
+  }
+
+  @Post('migrate-review')
+  @HttpCode(HttpStatus.OK)
+  async migrateReview(
+    @Headers('authorization') authorization: string,
+    @Body() body: { appId: string; approve: boolean }
+  ) {
+    const decoded = this.authService.requireAuth(authorization);
+    if ((decoded as any).code) return decoded;
+    if (!body?.appId) return { code: 400, msg: '申请 ID 不能为空', data: null };
+    return this.authService.reviewMigration(decoded.userId, body.appId, !!body.approve);
+  }
+
+  @Get('migrate-apps')
+  @HttpCode(HttpStatus.OK)
+  async migrateApps(@Headers('authorization') authorization: string) {
+    const decoded = this.authService.requireAuth(authorization);
+    if ((decoded as any).code) return decoded;
+    return this.authService.listMigrationApps(decoded.userId);
   }
 
   @Post('link-member')

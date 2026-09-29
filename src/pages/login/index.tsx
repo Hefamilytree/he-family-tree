@@ -1,27 +1,17 @@
-/* eslint-disable no-restricted-syntax -- 微信 getPhoneNumber 必须使用 @tarojs/components 原生 Button 的 open-type */
 import { useState } from 'react';
-import Taro, { useLoad } from '@tarojs/taro';
-import { View, Text, Button as WxButton } from '@tarojs/components';
+import Taro from '@tarojs/taro';
+import { View, Text } from '@tarojs/components';
 import { Button } from '@/components/ui/button';
 import { Network } from '@/network';
-import { MessageCircle } from 'lucide-react-taro';
+import { MessageCircle, ShieldCheck } from 'lucide-react-taro';
 
 export default function LoginPage() {
   const [wxLoading, setWxLoading] = useState(false);
 
   const isMiniApp = [Taro.ENV_TYPE.WEAPP, Taro.ENV_TYPE.TT].includes(Taro.getEnv() as any);
 
-  useLoad(() => {
-    console.log('LoginPage loaded');
-  });
-
-  /** 手机号授权回调（open-type=getPhoneNumber） */
-  const onGetPhone = async (e: any) => {
-    const phoneCode = e?.detail?.code;
-    if (!phoneCode) {
-      Taro.showToast({ title: '需授权手机号方可登录', icon: 'none' });
-      return;
-    }
+  /** 微信一键登录：仅 wx.login 获取 openid，不再强制手机号授权 */
+  const onWxLogin = async () => {
     setWxLoading(true);
     try {
       const loginRes: any = await Taro.login();
@@ -32,7 +22,7 @@ export default function LoginPage() {
       const res = await Network.request({
         url: '/api/auth/wx-login',
         method: 'POST',
-        data: { loginCode: loginRes.code, phoneCode },
+        data: { loginCode: loginRes.code },
       });
       console.log('WeChat login response:', res.data);
       if (res.data.code === 200) {
@@ -45,7 +35,7 @@ export default function LoginPage() {
       }
     } catch (error) {
       console.error('WeChat login error:', error);
-      Taro.showToast({ title: '网络错误', icon: 'none' });
+      Taro.showToast({ title: '网络错误，请稍后重试', icon: 'none' });
     } finally {
       setWxLoading(false);
     }
@@ -61,29 +51,35 @@ export default function LoginPage() {
         <Text className="block text-sm text-stone-500 mt-3">传承家族文化 · 记录血脉亲情</Text>
       </View>
 
-      {/* 微信一键登录（小程序）：先取微信标识，再授权验证手机号 */}
+      {/* 微信一键登录：仅获取 openid，登录不再强制手机号 */}
       <View className="mt-8">
         {isMiniApp ? (
-          <WxButton
-            openType="getPhoneNumber"
-            onGetPhoneNumber={onGetPhone}
-            loading={wxLoading}
-            className="w-full bg-emerald-600 text-white rounded-full py-3"
+          <Button
+            className="w-full bg-emerald-600 text-white rounded-full py-4"
+            onClick={onWxLogin}
+            disabled={wxLoading}
           >
-            <View className="flex flex-row items-center justify-center">
-              <MessageCircle size={20} color="#ffffff" className="mr-2" />
-              <Text className="text-base text-white">{wxLoading ? '授权中...' : '微信一键登录'}</Text>
-            </View>
-          </WxButton>
+            <MessageCircle size={20} color="#ffffff" className="mr-2" />
+            <Text className="text-base text-white">{wxLoading ? '登录中...' : '微信一键登录'}</Text>
+          </Button>
         ) : (
           <Button
             className="w-full bg-emerald-600 text-white rounded-full py-4"
             onClick={() => Taro.showToast({ title: '请在微信小程序中使用微信一键登录', icon: 'none' })}
           >
+            <MessageCircle size={20} color="#ffffff" className="mr-2" />
             <Text className="text-base">微信一键登录</Text>
           </Button>
         )}
-        <Text className="block text-xs text-stone-400 text-center mt-6">
+
+        <View className="mt-6 flex items-start gap-2 bg-white rounded-xl p-4">
+          <ShieldCheck size={18} color="#6B5B4F" className="mt-1 flex-shrink-0" />
+          <Text className="block text-xs leading-5 text-stone-500 flex-1">
+            仅用于标识您的微信身份并登录族谱，登录环节不再强制获取手机号。手机号可在登录后在「我的-账号与安全」中自愿绑定，用于族人联络与账号找回。登录即代表您已阅读并同意《隐私政策》。
+          </Text>
+        </View>
+
+        <Text className="block text-xs text-stone-400 text-center mt-4">
           一个微信号仅可创建一个账号，账号与微信号永久绑定
         </Text>
       </View>

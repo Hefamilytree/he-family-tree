@@ -50,5 +50,12 @@ export default defineAppConfig({
         selectedIconPath: './assets/tabbar/user-active.png',
       }
     ]
+  },
+  // 隐私保护相关配置（微信小程序端生效）
+  __usePrivacyCheck__: true,
+  permission: {
+    'scope.userInfo': {
+      desc: '用于完善您的族谱个人信息'
+    }
   }
 })

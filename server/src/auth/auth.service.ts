@@ -147,17 +147,13 @@ export class AuthService {
    *  - loginCode：Taro.login() 得到，用于后端换取 openid（账号唯一标识，永久绑定）
    *  - phoneCode：getPhoneNumber 按钮回调 code，用于换取手机号（登录必须验证手机号）
    */
-  async wxCodeLogin(loginCode: string, phoneCode: string, nickname?: string, avatarUrl?: string) {
-    const { code2Session, getPhoneNumber } = require('./wx.api');
+  async wxCodeLogin(loginCode: string, nickname?: string, avatarUrl?: string) {
+    const { code2Session } = require('./wx.api');
     const sess = await code2Session(loginCode);
     if (!sess.openid) {
       return { code: 400, msg: sess.errmsg || '获取微信标识失败', data: null };
     }
-    const ph = await getPhoneNumber(phoneCode);
-    if (!ph.phoneNumber) {
-      return { code: 400, msg: ph.errmsg || '手机号验证失败', data: null };
-    }
-    return this.wxLogin(sess.openid, ph.phoneNumber, nickname, avatarUrl);
+    return this.loginByOpenid(sess.openid, nickname, avatarUrl);
   }
 
   /**
@@ -166,13 +162,10 @@ export class AuthService {
    *  - 登录需验证手机号（phone 必填）
    *  - 已存在则直接登录；首次使用则自动创建账号
    */
-  async wxLogin(openid: string, phone: string, nickname?: string, avatarUrl?: string) {
+  /** 通过 openid 登录/注册（手机号可选，登录环节不强制） */
+  async loginByOpenid(openid: string, nickname?: string, avatarUrl?: string) {
     if (!openid) return { code: 400, msg: '缺少微信标识', data: null };
-    if (!phone || !/^1\d{10}$/.test(phone)) {
-      return { code: 400, msg: '请先验证手机号', data: null };
-    }
 
-    // 已绑定账号：直接登录
     const { data: existed } = await this.supabase
       .from('users')
       .select('*')
@@ -180,18 +173,17 @@ export class AuthService {
       .maybeSingle();
 
     if (existed) {
-      // 同步手机号/昵称/头像，但不允许改变身份角色
-      const { data: u } = await this.supabase
-        .from('users')
-        .update({ phone, nickname: nickname || existed.nickname, avatar_url: avatarUrl || existed.avatar_url })
-        .eq('id', existed.id)
-        .select()
-        .single();
-      const user = u || existed;
-      return this.buildWxResult(user, '登录成功');
+      // 已绑定账号：直接登录；不覆写手机号，避免清空已绑手机
+      if (nickname || avatarUrl) {
+        await this.supabase
+          .from('users')
+          .update({ nickname: nickname || existed.nickname, avatar_url: avatarUrl || existed.avatar_url })
+          .eq('id', existed.id);
+      }
+      return this.buildWxResult(existed, '登录成功');
     }
 
-    // 首次使用：自动注册，username 以 wx_ 前缀 + openid 后段保证唯一且不可再注册
+    // 首次使用：自动注册（若数据库中已存在绑定过该手机号的账号，手机号将在登录后可选绑定）
     const { data: existingSuper } = await this.supabase
       .from('users')
       .select('id')
@@ -208,7 +200,6 @@ export class AuthService {
         password_hash,
         nickname: nickname || '微信宗亲',
         avatar_url: avatarUrl || null,
-        phone,
         openid,
         role: isFirst ? 'super' : 'member',
       })
@@ -246,34 +237,175 @@ export class AuthService {
     };
   }
 
-  async updateProfile(userId: string, updates: { nickname?: string; avatar_url?: string }) {    const { data, error } = await this.supabase
+  // ===== 手机号绑定 / 更换 / 迁移 =====
+  private smsMap = new Map<string, { code: string; exp: number }>();
+
+  /** 发送短信验证码（业务库手机号；开发环境在响应中返回验证码便于调试） */
+  async sendSmsCode(phone: string, purpose = 'bind') {
+    if (!/^1\d{10}$/.test(phone)) return { code: 400, msg: '手机号格式不正确', data: null };
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    this.smsMap.set(purpose + ':' + phone, { code, exp: Date.now() + 5 * 60 * 1000 });
+    try {
+      await this.supabase.from('sms_codes').insert({ phone, code, purpose });
+    } catch (e) { /* 忽略 */ }
+    console.log(`[SMS] 手机号 ${phone} 验证码：${code}（仅开发预览展示）`);
+    return { code: 200, msg: '验证码已发送', data: { debugCode: code } };
+  }
+
+  private verifySms(phone: string, code: string, purpose = 'bind') {
+    const rec = this.smsMap.get(purpose + ':' + phone);
+    if (!rec) return false;
+    if (rec.exp < Date.now()) return false;
+    if (rec.code !== code) return false;
+    this.smsMap.delete(purpose + ':' + phone);
+    return true;
+  }
+
+  private async log(action: string, operatorId: string, targetUserId: string, detail: any) {
+    try {
+      await this.supabase.from('auth_logs').insert({
+        action, operator_id: operatorId || null, target_user_id: targetUserId || null, detail: detail || null,
+      });
+    } catch (e) {
+      console.error('写入日志失败', e);
+    }
+  }
+
+  /** 登录后绑定手机号（新绑） */
+  async bindPhone(userId: string, phone: string, code: string) {
+    if (!this.verifySms(phone, code, 'bind')) return { code: 400, msg: '验证码错误或已过期', data: null };
+    const { data: self } = await this.supabase.from('users').select('phone, member_id').eq('id', userId).single();
+    if (self && self.phone) return { code: 400, msg: '当前账号已绑定手机号，请使用「更换手机号」', data: null };
+    const { data: holder } = await this.supabase.from('users').select('id').eq('phone', phone).maybeSingle();
+    if (holder) return { code: 400, msg: '该手机号已被其他账号绑定', data: null };
+    await this.supabase.from('users').update({ phone }).eq('id', userId);
+    await this.log('bind_phone', userId, userId, { before: null, after: phone });
+    const { data: me } = await this.supabase.from('users').select('member_id').eq('id', userId).single();
+    if (me && me.member_id) await this.supabase.from('members').update({ phone }).eq('id', me.member_id);
+    return { code: 200, msg: '手机号绑定成功', data: { phone } };
+  }
+
+  /** 更换手机号：需原手机号 + 新手机号验证码 */
+  async changePhone(userId: string, oldPhone: string, newPhone: string, code: string) {
+    const { data: self } = await this.supabase.from('users').select('phone').eq('id', userId).single();
+    if (!self || self.phone !== oldPhone) return { code: 400, msg: '原手机号不匹配', data: null };
+    if (!this.verifySms(newPhone, code, 'change')) return { code: 400, msg: '新手机号验证码错误或已过期', data: null };
+    const { data: holder } = await this.supabase.from('users').select('id').eq('phone', newPhone).maybeSingle();
+    if (holder && holder.id !== userId) return { code: 400, msg: '该手机号已被其他账号绑定', data: null };
+    await this.supabase.from('users').update({ phone: newPhone }).eq('id', userId);
+    await this.log('change_phone', userId, userId, { before: oldPhone, after: newPhone });
+    return { code: 200, msg: '手机号更换成功', data: { phone: newPhone } };
+  }
+
+  /** 管理员代改手机号 */
+  async adminChangePhone(operatorId: string, targetUserId: string, newPhone: string) {
+    const { data: op } = await this.supabase.from('users').select('role').eq('id', operatorId).single();
+    if (!op || (op.role !== 'super' && op.role !== 'admin')) return { code: 403, msg: '无权限', data: null };
+    const { data: t } = await this.supabase.from('users').select('phone').eq('id', targetUserId).single();
+    const before = t && t.phone ? t.phone : '';
+    await this.supabase.from('users').update({ phone: newPhone }).eq('id', targetUserId);
+    await this.log('admin_change_phone', operatorId, targetUserId, { before, after: newPhone });
+    return { code: 200, msg: '已协助修改手机号', data: { phone: newPhone } };
+  }
+
+  /** 微信账号迁移：新微信登录后发起；原手机号可用则短信校验后立即迁移 */
+  async migrateAccount(userId: string, phone: string, code?: string) {
+    const { data: target } = await this.supabase.from('users').select('*').eq('phone', phone).maybeSingle();
+    if (!target) return { code: 404, msg: '未找到原手机号对应的宗亲账号', data: null };
+    if (!this.verifySms(phone, code || '', 'migrate')) {
+      return { code: 400, msg: '验证码错误或已过期，如原手机号不可用请走人工审核', data: null };
+    }
+    return this.doMigrate(userId, target.id);
+  }
+
+  /** 提交人工审核迁移申请（原手机号不可用） */
+  async applyMigration(userId: string, phone: string, reason: string) {
+    const { data: target } = await this.supabase.from('users').select('id, phone').eq('phone', phone).maybeSingle();
+    if (!target) return { code: 404, msg: '未找到原手机号对应的宗亲账号', data: null };
+    const { error } = await this.supabase.from('migration_applications').insert({
+      from_user_id: target.id, to_user_id: userId, phone, reason: reason || '', status: 'pending', submitted_by: userId,
+    });
+    if (error) return { code: 500, msg: '提交失败', data: null };
+    return { code: 200, msg: '迁移申请已提交，等待管理人员审核', data: null };
+  }
+
+  /** 管理员审核并执行迁移 */
+  async reviewMigration(operatorId: string, appId: string, approve: boolean) {
+    const { data: op } = await this.supabase.from('users').select('role').eq('id', operatorId).single();
+    if (!op || (op.role !== 'super' && op.role !== 'admin')) return { code: 403, msg: '无权限', data: null };
+    const { data: app } = await this.supabase.from('migration_applications').select('*').eq('id', appId).single();
+    if (!app || app.status !== 'pending') return { code: 400, msg: '申请不存在或已处理', data: null };
+    if (!approve) {
+      await this.supabase.from('migration_applications').update({
+        status: 'rejected', reviewed_by: operatorId, reviewed_at: new Date().toISOString(),
+      }).eq('id', appId);
+      return { code: 200, msg: '已驳回申请', data: null };
+    }
+    const r = await this.doMigrate(app.to_user_id, app.from_user_id, operatorId);
+    await this.supabase.from('migration_applications').update({
+      status: 'approved', reviewed_by: operatorId, reviewed_at: new Date().toISOString(),
+    }).eq('id', appId);
+    return r;
+  }
+
+  /** 管理员拉取待审核迁移申请列表 */
+  async listMigrationApps(operatorId: string) {
+    const { data: op } = await this.supabase.from('users').select('role').eq('id', operatorId).single();
+    if (!op || (op.role !== 'super' && op.role !== 'admin')) return { code: 403, msg: '无权限', data: null };
+    const { data } = await this.supabase
+      .from('migration_applications')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100);
+    return { code: 200, msg: 'ok', data: data || [] };
+  }
+
+  /** 执行迁移：转移旧账号身份/成员/权限至新 openid 账号，解绑旧 openid */
+  private async doMigrate(newUid: string, oldUid: string, reviewerId?: string) {
+    const { data: oldUser } = await this.supabase.from('users').select('*').eq('id', oldUid).single();
+    const { data: newUser } = await this.supabase.from('users').select('*').eq('id', newUid).single();
+    if (!oldUser || !newUser) return { code: 404, msg: '账号不存在', data: null };
+    if (oldUser.id === newUser.id) return { code: 400, msg: '目标账号与当前账号相同', data: null };
+
+    await this.supabase.from('comments').update({ user_id: newUid }).eq('user_id', oldUid);
+    await this.supabase.from('registrations').update({ user_id: newUid }).eq('user_id', oldUid);
+    await this.supabase.from('kin_contacts').update({ created_by: newUid }).eq('created_by', oldUid);
+
+    await this.supabase.from('users').update({
+      member_id: oldUser.member_id || null,
+      family_id: oldUser.family_id || null,
+      role: oldUser.role || 'member',
+      nickname: oldUser.nickname || newUser.nickname,
+      avatar_url: oldUser.avatar_url || newUser.avatar_url,
+      phone: oldUser.phone || newUser.phone,
+    }).eq('id', newUid);
+
+    await this.supabase.from('users').update({ openid: null, member_id: null }).eq('id', oldUid);
+
+    await this.log('migrate_account', newUid, oldUid, {
+      from_openid: oldUser.openid, to_openid: newUser.openid,
+      from_phone: oldUser.phone, to_phone: newUser.phone, reviewer: reviewerId || null,
+    });
+    return { code: 200, msg: '账号迁移成功，数据与权限已完整保留', data: null };
+  }
+
+  async updateProfile(userId: string, updates: { nickname?: string; avatar_url?: string }) {
+    const { data, error } = await this.supabase
       .from('users')
       .update(updates)
       .eq('id', userId)
       .select()
       .single();
-
-    if (error) {
-      return { code: 500, msg: '更新失败', data: null };
-    }
-
+    if (error) return { code: 500, msg: '更新失败', data: null };
     return {
       code: 200,
       msg: '更新成功',
-      data: {
-        id: data.id,
-        username: data.username,
-        nickname: data.nickname,
-        role: data.role,
-      },
+      data: { id: data.id, username: data.username, nickname: data.nickname, role: data.role },
     };
   }
 
   async setAdmin(operatorId: string, targetUserId: string) {
-    if (!operatorId || operatorId === targetUserId) {
-      return { code: 400, msg: '参数不合法', data: null };
-    }
-    // 仅主管理人员可设置管理人员，其它人无权设置
+    if (!operatorId || operatorId === targetUserId) return { code: 400, msg: '参数不合法', data: null };
     const { data: operator } = await this.supabase.from('users').select('role').eq('id', operatorId).single();
     if (!operator || operator.role !== 'super') {
       return { code: 403, msg: '仅主管理人员可设置管理人员', data: null };
@@ -284,85 +416,8 @@ export class AuthService {
       .eq('id', targetUserId)
       .select('id, username, role')
       .single();
-    if (error || !data) {
-      return { code: 500, msg: '设置失败', data: null };
-    }
-    return {
-      code: 200,
-      msg: '已设置为管理人员',
-      data: { id: data.id, username: data.username, role: data.role },
-    };
-  }
-
-  async wechatLogin(code: string, nickname?: string, avatar_url?: string) {
-    const appid = process.env.WX_APPID;
-    const secret = process.env.WX_SECRET;
-    let openid: string | null = null;
-
-    if (appid && secret) {
-      try {
-        const url =
-          `https://api.weixin.qq.com/sns/jscode2session?appid=${appid}` +
-          `&secret=${secret}&js_code=${encodeURIComponent(code)}&grant_type=authorization_code`;
-        const res = await fetch(url);
-        const json = (await res.json()) as any;
-        if (json.openid) {
-          openid = json.openid;
-        } else {
-          return { code: 500, msg: '微信登录失败：' + (json.errmsg || 'code 无效'), data: null };
-        }
-      } catch (e) {
-        return { code: 500, msg: '微信登录失败，请稍后重试', data: null };
-      }
-    } else {
-      // 未配置 WX_APPID/WX_SECRET 时（开发/本地环境）使用 code 作为降级标识
-      openid = `wx_dev_${code}`;
-    }
-
-    let user: any = null;
-    const { data: existing } = await this.supabase.from('users').select('*').eq('openid', openid).maybeSingle();
-    if (existing) {
-      user = existing;
-    } else {
-      const password_hash = await bcrypt.hash(String(Math.random() * 1e10), 10);
-      const { data: created, error } = await this.supabase
-        .from('users')
-        .insert({
-          openid: openid!,
-          username: `wx_${(openid || 'wx').slice(-8)}`,
-          nickname: nickname || '微信用户',
-          password_hash,
-          role: 'member',
-          avatar_url: avatar_url || null,
-        })
-        .select()
-        .single();
-      if (error) {
-        return { code: 500, msg: '微信登录失败，请重试', data: null };
-      }
-      user = created;
-    }
-
-    const token = jwt.sign(
-      { userId: user.id, username: user.username, role: user.role, member_id: user.member_id },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    return {
-      code: 200,
-      msg: '登录成功',
-      data: {
-        user: {
-          id: user.id,
-          username: user.username,
-          nickname: user.nickname,
-          role: user.role,
-          member_id: user.member_id,
-        },
-        token,
-      },
-    };
+    if (error || !data) return { code: 500, msg: '设置失败', data: null };
+    return { code: 200, msg: '已设置为管理人员', data: { id: data.id, username: data.username, role: data.role } };
   }
 
   async linkMember(
@@ -370,81 +425,59 @@ export class AuthService {
     memberId: string,
     phone?: string,
     residence?: string,
-    generationTitle?: string,
+    generationTitle?: string
   ) {
-    if (!userId || !memberId) {
-      return { code: 400, msg: '参数不完整', data: null };
-    }
-    if (!phone || !phone.trim()) {
-      return { code: 400, msg: '请填写手机号码', data: null };
-    }
-    if (!residence || !residence.trim()) {
-      return { code: 400, msg: '请填写现居住地', data: null };
-    }
-
-    // 校验所选成员存在，并确定字辈（成员已有字辈则沿用；否则必须传入并回写）
-    const { data: member, error: memErr } = await this.supabase
-      .from('members')
-      .select('id, generation_title')
-      .eq('id', memberId)
-      .single();
-    if (memErr || !member) {
-      return { code: 404, msg: '所选宗亲不存在', data: null };
-    }
-    const finalTitle = (member.generation_title || '').trim() || (generationTitle || '').trim();
-    if (!finalTitle) {
-      return { code: 400, msg: '请选择字辈', data: null };
-    }
-    if (!(member.generation_title || '').trim() && finalTitle) {
-      // 成员原本无字辈，将本次选择回写到成员
+    if (!userId || !memberId) return { code: 400, msg: '参数不完整', data: null };
+    const { data: member } = await this.supabase.from('members').select('*').eq('id', memberId).single();
+    if (!member) return { code: 404, msg: '所选宗亲不存在', data: null };
+    // 若成员未定字辈则用传入字辈回写
+    const finalTitle = member.generation_title || generationTitle || null;
+    if (finalTitle && finalTitle !== member.generation_title) {
       await this.supabase.from('members').update({ generation_title: finalTitle }).eq('id', memberId);
     }
-
-    const { data, error } = await this.supabase
+    // 更新成员登记信息
+    const patch: any = { status: 2 };
+    if (phone) patch.phone = phone;
+    if (residence) patch.residence = residence;
+    await this.supabase.from('members').update(patch).eq('id', memberId);
+    // 用户关联成员并升级为认证宗亲
+    await this.supabase
       .from('users')
-      .update({ member_id: memberId, phone: phone.trim(), residence: residence.trim(), role: 'verified' })
-      .eq('id', userId)
-      .select('id, username, role')
-      .single();
-    if (error) {
-      return { code: 500, msg: '关联失败，请重试', data: null };
-    }
-    return {
-      code: 200,
-      msg: '关联成功',
-      data: {
-        id: data.id,
-        username: data.username,
-        role: 'verified',
-        member_id: memberId,
-        phone: phone.trim(),
-        residence: residence.trim(),
-        generation_title: finalTitle,
-      },
-    };
+      .update({ member_id: memberId, role: 'verified', phone: phone || undefined, residence: residence || undefined })
+      .eq('id', userId);
+    await this.log('link_member', userId, userId, { member_id: memberId });
+    return { code: 200, msg: '宗亲信息关联成功，已成为认证宗亲', data: { member_id: memberId } };
   }
 
-  async clearAllData(userId: string) {
-    const { data: me, error: meErr } = await this.supabase
-      .from('users')
-      .select('id, role')
-      .eq('id', userId)
-      .single();
-    if (meErr || !me || !['super', 'admin'].includes(me.role)) {
-      return { code: 403, msg: '仅主管理人员可清除全部数据', data: null };
-    }
-    const tables = ['spouses', 'comments', 'registrations', 'economic_development', 'harmony_activities', 'cultural_heritage', 'members'];
+  async clearAllData(operatorId: string) {
+    const { data: op } = await this.supabase.from('users').select('role').eq('id', operatorId).single();
+    if (!op || op.role !== 'super') return { code: 403, msg: '仅主管理人员可清空数据', data: null };
+    const tables = [
+      'comments', 'cultural_heritage', 'economic_development', 'family_applications',
+      'harmony_activities', 'kin_contacts', 'migration_applications', 'registrations',
+      'spouses', 'sms_codes',
+    ];
     for (const t of tables) {
-      const { error } = await this.supabase.from(t).delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      if (error) {
-        return { code: 500, msg: `清除${t}失败`, data: null };
-      }
+      try { await this.supabase.from(t).delete().neq('id', 'x'); } catch (e) { /* 忽略 */ }
     }
-    const { error: famErr } = await this.supabase.from('families').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    if (famErr) {
-      return { code: 500, msg: '清除家族失败', data: null };
+    await this.supabase.from('members').delete().neq('id', 'x');
+    await this.supabase.from('users').delete().neq('id', 'x');
+    await this.log('clear_all_data', operatorId, operatorId, { at: new Date().toISOString() });
+    return { code: 200, msg: '已清空全部数据', data: null };
+  }
+
+  /** 微信一键登录：loginCode 换取 openid 后完成登录（不强制手机号授权） */
+  async wechatLogin(loginCode: string, nickname?: string, avatarUrl?: string) {
+    if (!loginCode) return { code: 400, msg: '缺少登录凭证', data: null };
+    const { code2Session } = require('./wx.api');
+    const session = await code2Session(loginCode);
+    if (!session || !session.openid) {
+      // 开发环境降级：未配置 WX_APPID/WX_SECRET 时用 loginCode 作为 openid
+      const devOpenid = session?.errcode === -1 ? `wx_dev_${loginCode}` : null;
+      if (!devOpenid) return { code: 400, msg: '微信登录失败，请稍后重试', data: null };
+      return this.loginByOpenid(devOpenid, nickname, avatarUrl);
     }
-    return { code: 200, msg: '已清除全部家族数据', data: null };
+    return this.loginByOpenid(session.openid, nickname, avatarUrl);
   }
 
   verifyToken(token: string) {
@@ -454,5 +487,14 @@ export class AuthService {
     } catch (error) {
       return null;
     }
+  }
+
+  /** 从 authorization 头解析并校验登录态；成功返回解码负载，失败返回 { code: 401, msg } */
+  requireAuth(authorization?: string) {
+    if (!authorization) return { code: 401, msg: '未登录', data: null };
+    const token = authorization.replace('Bearer ', '');
+    const decoded = this.verifyToken(token) as any;
+    if (!decoded) return { code: 401, msg: 'token 无效或已过期', data: null };
+    return decoded;
   }
 }
