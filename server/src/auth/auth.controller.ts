@@ -96,35 +96,36 @@ export class AuthController {
     return { code: 400, msg: '缺少微信标识(openid/logincode)', data: null };
   }
 
-  @Post('sms-code')
+  @Post('phone-apply')
   @HttpCode(HttpStatus.OK)
-  async smsCode(@Body() body: { phone: string; purpose?: string }) {
-    if (!body || !body.phone) return { code: 400, msg: '请填写手机号', data: null };
-    return this.authService.sendSmsCode(body.phone, body.purpose || 'bind');
-  }
-
-  @Post('bind-phone')
-  @HttpCode(HttpStatus.OK)
-  async bindPhone(
+  async phoneApply(
     @Headers('authorization') authorization: string,
-    @Body() body: { phone: string; code: string }
+    @Body() body: { type?: 'bind' | 'change'; newPhone?: string; oldPhone?: string; reason?: string }
   ) {
     const decoded = this.authService.requireAuth(authorization);
     if ((decoded as any).code) return decoded;
-    if (!body?.phone || !body?.code) return { code: 400, msg: '参数不完整', data: null };
-    return this.authService.bindPhone(decoded.userId, body.phone, body.code);
+    if (!body?.type || !body?.newPhone) return { code: 400, msg: '参数不完整', data: null };
+    return this.authService.submitPhoneApply(decoded.userId, body.type, body.newPhone, body.oldPhone, body.reason);
   }
 
-  @Post('change-phone')
+  @Post('phone-review')
   @HttpCode(HttpStatus.OK)
-  async changePhone(
+  async phoneReview(
     @Headers('authorization') authorization: string,
-    @Body() body: { oldPhone: string; newPhone: string; code: string }
+    @Body() body: { appId: string; approve: boolean }
   ) {
     const decoded = this.authService.requireAuth(authorization);
     if ((decoded as any).code) return decoded;
-    if (!body?.oldPhone || !body?.newPhone || !body?.code) return { code: 400, msg: '参数不完整', data: null };
-    return this.authService.changePhone(decoded.userId, body.oldPhone, body.newPhone, body.code);
+    if (!body?.appId) return { code: 400, msg: '申请 ID 不能为空', data: null };
+    return this.authService.reviewPhoneApply(decoded.userId, body.appId, !!body.approve);
+  }
+
+  @Get('phone-apps')
+  @HttpCode(HttpStatus.OK)
+  async phoneApps(@Headers('authorization') authorization: string) {
+    const decoded = this.authService.requireAuth(authorization);
+    if ((decoded as any).code) return decoded;
+    return this.authService.listPhoneApps(decoded.userId);
   }
 
   @Post('admin-change-phone')
@@ -139,28 +140,16 @@ export class AuthController {
     return this.authService.adminChangePhone(decoded.userId, body.targetUserId, body.newPhone);
   }
 
-  @Post('migrate')
-  @HttpCode(HttpStatus.OK)
-  async migrate(
-    @Headers('authorization') authorization: string,
-    @Body() body: { phone: string; code?: string }
-  ) {
-    const decoded = this.authService.requireAuth(authorization);
-    if ((decoded as any).code) return decoded;
-    if (!body?.phone) return { code: 400, msg: '请填写原手机号', data: null };
-    return this.authService.migrateAccount(decoded.userId, body.phone, body.code);
-  }
-
   @Post('migrate-apply')
   @HttpCode(HttpStatus.OK)
   async migrateApply(
     @Headers('authorization') authorization: string,
-    @Body() body: { phone: string; reason?: string }
+    @Body() body: { phone: string; identity?: string; reason?: string }
   ) {
     const decoded = this.authService.requireAuth(authorization);
     if ((decoded as any).code) return decoded;
     if (!body?.phone) return { code: 400, msg: '请填写原手机号', data: null };
-    return this.authService.applyMigration(decoded.userId, body.phone, body.reason || '');
+    return this.authService.applyMigration(decoded.userId, body.phone, body.identity, body.reason);
   }
 
   @Post('migrate-review')

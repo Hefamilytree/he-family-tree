@@ -92,25 +92,24 @@ const ProfilePage = () => {
   const [showAccountDialog, setShowAccountDialog] = useState(false);
   // 手机号绑定（新绑）
   const [bindPhone, setBindPhone] = useState('');
-  const [bindCode, setBindCode] = useState('');
-  const [sendBindBtn, setSendBindBtn] = useState('获取验证码');
   const [bindLoading, setBindLoading] = useState(false);
   // 更换手机号
   const [showChangePhone, setShowChangePhone] = useState(false);
   const [oldPhone, setOldPhone] = useState('');
   const [newPhone, setNewPhone] = useState('');
-  const [changeCode, setChangeCode] = useState('');
   const [changeLoading, setChangeLoading] = useState(false);
   // 微信账号迁移
   const [showMigrate, setShowMigrate] = useState(false);
   const [migratePhone, setMigratePhone] = useState('');
-  const [migrateCode, setMigrateCode] = useState('');
   const [migrateReason, setMigrateReason] = useState('');
-  const [migrateMode, setMigrateMode] = useState<'sms' | 'apply'>('sms');
   const [migrateLoading, setMigrateLoading] = useState(false);
   // 管理员：协助改手机号与迁移审核
   const [showAdminMigrateReview, setShowAdminMigrateReview] = useState(false);
   const [migrateApps, setMigrateApps] = useState<any[]>([]);
+  // 管理员：手机号申请审核
+  const [showAdminPhoneReview, setShowAdminPhoneReview] = useState(false);
+  const [phoneApps, setPhoneApps] = useState<any[]>([]);
+  const [phoneAppsLoading, setPhoneAppsLoading] = useState(false);
   const [sortUid, setSortUid] = useState('');
   const [adminNewPhone, setAdminNewPhone] = useState('');
   const [adminPhoneSubmit, setAdminPhoneSubmit] = useState(false);
@@ -347,6 +346,10 @@ const ProfilePage = () => {
       Taro.showToast({ title: '请先登录', icon: 'none' });
       return;
     }
+    if (userInfo?.role !== 'super') {
+      Taro.showToast({ title: '仅主管理人员可创建家族', icon: 'none' });
+      return;
+    }
     setFamilyForm({ surname: '', family_name: '', hall_name: '', motto: '', origin: '', description: '' });
     setShowFamilyDialog(true);
   };
@@ -502,108 +505,38 @@ const ProfilePage = () => {
     }
   };
 
-  // ===== 手机号绑定 =====
-  const sendBindSms = async () => {
-    if (!/^1\d{10}$/.test(bindPhone.trim())) {
-      Taro.showToast({ title: '请填写正确的手机号', icon: 'none' });
-      return;
-    }
-    try {
-      const token = Taro.getStorageSync('token');
-      const res = await Network.request({
-        url: '/api/auth/sms-code',
-        method: 'POST',
-        data: { phone: bindPhone.trim(), purpose: 'bind' },
-        header: { Authorization: `Bearer ${token}` },
-      });
-      console.log('发送验证码:', res.data);
-      if (res.data?.code === 200) {
-        Taro.showToast({ title: '验证码已发送', icon: 'success' });
-        let n = 60;
-        setSendBindBtn(`${n}s`);
-        const timer = setInterval(() => {
-          n -= 1;
-          if (n <= 0) {
-            clearInterval(timer);
-            setSendBindBtn('获取验证码');
-          } else {
-            setSendBindBtn(`${n}s`);
-          }
-        }, 1000);
-      } else {
-        Taro.showToast({ title: res.data?.msg || '发送失败', icon: 'none' });
-      }
-    } catch (e) {
-      console.error('发送验证码失败:', e);
-      Taro.showToast({ title: '网络错误', icon: 'none' });
-    }
-  };
-
+  // ===== 手机号绑定（申请-审核制） =====
   const handleBindPhone = async () => {
     if (!/^1\d{10}$/.test(bindPhone.trim())) {
       Taro.showToast({ title: '请填写正确的手机号', icon: 'none' });
-      return;
-    }
-    if (!bindCode.trim()) {
-      Taro.showToast({ title: '请填写验证码', icon: 'none' });
       return;
     }
     setBindLoading(true);
     try {
       const token = Taro.getStorageSync('token');
       const res = await Network.request({
-        url: '/api/auth/bind-phone',
+        url: '/api/auth/phone-apply',
         method: 'POST',
-        data: { phone: bindPhone.trim(), code: bindCode.trim() },
+        data: { type: 'bind', newPhone: bindPhone.trim() },
         header: { Authorization: `Bearer ${token}` },
       });
-      console.log('绑定手机号:', res.data);
+      console.log('绑定手机号申请:', res.data);
       if (res.data?.code === 200) {
-        const updated = { ...userInfo, phone: bindPhone.trim() };
-        setUserInfo(updated);
-        Taro.setStorageSync('userInfo', updated);
         setShowAccountDialog(false);
         setBindPhone('');
-        setBindCode('');
-        Taro.showToast({ title: '绑定成功', icon: 'success' });
+        Taro.showToast({ title: '绑定申请已提交，等待管理员审核', icon: 'success' });
       } else {
-        Taro.showToast({ title: res.data?.msg || '绑定失败', icon: 'none' });
+        Taro.showToast({ title: res.data?.msg || '提交失败', icon: 'none' });
       }
     } catch (e) {
-      console.error('绑定失败:', e);
+      console.error('绑定申请失败:', e);
       Taro.showToast({ title: '网络错误', icon: 'none' });
     } finally {
       setBindLoading(false);
     }
   };
 
-  // ===== 更换手机号 =====
-  const sendChangeSms = async (phone: string) => {
-    if (!/^1\d{10}$/.test(phone.trim())) {
-      Taro.showToast({ title: '请填写正确的手机号', icon: 'none' });
-      return false;
-    }
-    try {
-      const token = Taro.getStorageSync('token');
-      const res = await Network.request({
-        url: '/api/auth/sms-code',
-        method: 'POST',
-        data: { phone: phone.trim(), purpose: 'change' },
-        header: { Authorization: `Bearer ${token}` },
-      });
-      if (res.data?.code === 200) {
-        Taro.showToast({ title: '验证码已发送', icon: 'success' });
-        return true;
-      }
-      Taro.showToast({ title: res.data?.msg || '发送失败', icon: 'none' });
-      return false;
-    } catch (e) {
-      console.error('发送验证码失败:', e);
-      Taro.showToast({ title: '网络错误', icon: 'none' });
-      return false;
-    }
-  };
-
+  // ===== 更换手机号（申请-审核制；本人变更提交申请，管理员走 handleAdminChangePhone） =====
   const handleChangePhone = async () => {
     if (!/^1\d{10}$/.test(oldPhone.trim())) {
       Taro.showToast({ title: '请填写原手机号', icon: 'none' });
@@ -613,71 +546,38 @@ const ProfilePage = () => {
       Taro.showToast({ title: '请填写新手机号', icon: 'none' });
       return;
     }
-    if (!changeCode.trim()) {
-      Taro.showToast({ title: '请填写验证码', icon: 'none' });
-      return;
-    }
+    // 本人更换：提交申请，管理员审核通过后生效
     setChangeLoading(true);
     try {
       const token = Taro.getStorageSync('token');
       const res = await Network.request({
-        url: '/api/auth/change-phone',
+        url: '/api/auth/phone-apply',
         method: 'POST',
-        data: { oldPhone: oldPhone.trim(), newPhone: newPhone.trim(), code: changeCode.trim() },
+        data: { type: 'change', oldPhone: oldPhone.trim(), newPhone: newPhone.trim() },
         header: { Authorization: `Bearer ${token}` },
       });
-      console.log('更换手机号:', res.data);
+      console.log('更换手机号申请:', res.data);
       if (res.data?.code === 200) {
-        const updated = { ...userInfo, phone: newPhone.trim() };
-        setUserInfo(updated);
-        Taro.setStorageSync('userInfo', updated);
         setShowChangePhone(false);
         setOldPhone('');
         setNewPhone('');
-        setChangeCode('');
-        Taro.showToast({ title: '更换成功', icon: 'success' });
+        Taro.showToast({ title: '更换申请已提交，等待管理员审核', icon: 'success' });
       } else {
-        Taro.showToast({ title: res.data?.msg || '更换失败', icon: 'none' });
+        Taro.showToast({ title: res.data?.msg || '提交失败', icon: 'none' });
       }
     } catch (e) {
-      console.error('更换失败:', e);
+      console.error('更换申请失败:', e);
       Taro.showToast({ title: '网络错误', icon: 'none' });
     } finally {
       setChangeLoading(false);
     }
   };
 
-  // ===== 微信账号迁移 =====
+  // ===== 微信账号迁移（人工审核制） =====
   const openMigrate = () => {
     setMigratePhone('');
-    setMigrateCode('');
     setMigrateReason('');
-    setMigrateMode('sms');
     setShowMigrate(true);
-  };
-
-  const sendMigrateSms = async () => {
-    if (!/^1\d{10}$/.test(migratePhone.trim())) {
-      Taro.showToast({ title: '请填写原手机号', icon: 'none' });
-      return;
-    }
-    try {
-      const token = Taro.getStorageSync('token');
-      const res = await Network.request({
-        url: '/api/auth/sms-code',
-        method: 'POST',
-        data: { phone: migratePhone.trim(), purpose: 'migrate' },
-        header: { Authorization: `Bearer ${token}` },
-      });
-      if (res.data?.code === 200) {
-        Taro.showToast({ title: '验证码已发送', icon: 'success' });
-      } else {
-        Taro.showToast({ title: res.data?.msg || '发送失败', icon: 'none' });
-      }
-    } catch (e) {
-      console.error('发送验证码失败:', e);
-      Taro.showToast({ title: '网络错误', icon: 'none' });
-    }
   };
 
   const confirmMigrate = async () => {
@@ -686,40 +586,21 @@ const ProfilePage = () => {
       setMigrateLoading(true);
       try {
         const token = Taro.getStorageSync('token');
-        const url =
-          migrateMode === 'sms'
-            ? '/api/auth/migrate'
-            : '/api/auth/migrate-apply';
-        const data =
-          migrateMode === 'sms'
-            ? { phone: migratePhone.trim(), code: migrateCode.trim() }
-            : { phone: migratePhone.trim(), reason: migrateReason.trim() };
         const res = await Network.request({
-          url,
+          url: '/api/auth/migrate-apply',
           method: 'POST',
-          data,
+          data: { phone: migratePhone.trim(), reason: migrateReason.trim() },
           header: { Authorization: `Bearer ${token}` },
         });
-        console.log('迁移响应:', res.data);
+        console.log('迁移申请响应:', res.data);
         if (res.data?.code === 200) {
           setShowMigrate(false);
-          Taro.showToast({
-            title: migrateMode === 'sms' ? '迁移成功' : '申请已提交，等待审核',
-            icon: 'success',
-          });
-          // 迁移成功后提示重新登录
-          if (migrateMode === 'sms') {
-            setTimeout(() => {
-              Taro.removeStorageSync('token');
-              Taro.removeStorageSync('userInfo');
-              Taro.reLaunch({ url: '/pages/login/index' });
-            }, 1500);
-          }
+          Taro.showToast({ title: '迁移申请已提交，等待管理员审核', icon: 'success' });
         } else {
           Taro.showToast({ title: res.data?.msg || '操作失败', icon: 'none' });
         }
       } catch (e) {
-        console.error('迁移失败:', e);
+        console.error('迁移申请失败:', e);
         Taro.showToast({ title: '网络错误', icon: 'none' });
       } finally {
         setMigrateLoading(false);
@@ -731,7 +612,7 @@ const ProfilePage = () => {
       Taro.showModal({
         title: '迁移主管理员账号',
         content:
-          '您正在迁移主管理人员账号身份。迁移后管理权限将转移给新微信账号，需谨慎操作。确定继续吗？',
+          '您正在申请迁移主管理人员账号身份。迁移后管理权限将转移给新微信账号，需谨慎操作。确定继续吗？',
         confirmColor: '#c53030',
         success: (r) => {
           if (r.confirm) doMigrate();
@@ -828,6 +709,57 @@ const ProfilePage = () => {
     }
   };
 
+  // ===== 管理员：手机号申请审核 =====
+  const loadPhoneApps = async () => {
+    setPhoneAppsLoading(true);
+    try {
+      const token = Taro.getStorageSync('token');
+      const res = await Network.request({
+        url: '/api/auth/phone-apps',
+        method: 'GET',
+        header: { Authorization: `Bearer ${token}` },
+      });
+      console.log('手机号申请列表:', res.data);
+      setPhoneApps(res.data?.data || []);
+    } catch (e) {
+      console.error('加载手机号申请失败:', e);
+      setPhoneApps([]);
+    } finally {
+      setPhoneAppsLoading(false);
+    }
+  };
+
+  const openAdminPhoneReview = async () => {
+    if (!isLoggedIn) {
+      Taro.showToast({ title: '请先登录', icon: 'none' });
+      return;
+    }
+    setShowAdminPhoneReview(true);
+    await loadPhoneApps();
+  };
+
+  const handleReviewPhone = async (appId: string, approve: boolean) => {
+    try {
+      const token = Taro.getStorageSync('token');
+      const res = await Network.request({
+        url: '/api/auth/phone-review',
+        method: 'POST',
+        data: { appId, approve },
+        header: { Authorization: `Bearer ${token}` },
+      });
+      console.log('审核手机号申请:', res.data);
+      if (res.data?.code === 200) {
+        Taro.showToast({ title: approve ? '已通过并写入手机号' : '已驳回', icon: 'success' });
+        await loadPhoneApps();
+      } else {
+        Taro.showToast({ title: res.data?.msg || '操作失败', icon: 'none' });
+      }
+    } catch (e) {
+      console.error('审核失败:', e);
+      Taro.showToast({ title: '网络错误', icon: 'none' });
+    }
+  };
+
   return (
     <View className="min-h-screen bg-amber-50">
       {/* 用户信息区域 */}
@@ -881,8 +813,8 @@ const ProfilePage = () => {
 
       {/* 功能菜单 */}
       <View className="px-4 py-6 space-y-4">
-        {/* 创建家族：仅在尚无家族时展示，家族创建成功后对所有成员隐藏 */}
-        {isLoggedIn && !familyExists && (
+        {/* 创建家族：仅主管理人员可见，非主管理员不再展示创建家族弹窗入口 */}
+        {isLoggedIn && userInfo?.role === 'super' && !familyExists && (
           <Card
             className="bg-amber-100 border-amber-300 active:opacity-80"
             onClick={handleOpenCreateFamily}
@@ -1242,30 +1174,18 @@ const ProfilePage = () => {
                       onInput={(e) => setBindPhone(e.detail.value)}
                     />
                   </View>
-                  <Button size="sm" variant="outline" onClick={sendBindSms}>
-                    <Text>{sendBindBtn}</Text>
-                  </Button>
-                </View>
-                <View className="flex flex-row gap-2">
-                  <View className="flex-1 bg-stone-50 rounded-xl px-3 py-2">
-                    <Input
-                      className="w-full"
-                      type="number"
-                      maxlength={6}
-                      value={bindCode}
-                      placeholder="短信验证码"
-                      onInput={(e) => setBindCode(e.detail.value)}
-                    />
-                  </View>
                   <Button
                     size="sm"
                     className="bg-teal-800 text-white"
                     disabled={bindLoading}
                     onClick={handleBindPhone}
                   >
-                    <Text>{bindLoading ? '绑定中...' : '绑定'}</Text>
+                    <Text>{bindLoading ? '提交中...' : '提交申请'}</Text>
                   </Button>
                 </View>
+                <Text className="block text-xs text-stone-400">
+                  提交后由家族管理员人工审核，审核通过后生效。
+                </Text>
               </View>
             )}
 
@@ -1277,7 +1197,6 @@ const ProfilePage = () => {
                 onClick={() => {
                   setOldPhone(userInfo.phone);
                   setNewPhone('');
-                  setChangeCode('');
                   setShowChangePhone(true);
                 }}
               >
@@ -1329,6 +1248,13 @@ const ProfilePage = () => {
                 >
                   <KeyRound size={16} color="#FFFDF7" />
                   <Text className="text-sm">迁移人工审核</Text>
+                </Button>
+                <Button
+                  className="w-full bg-teal-700 text-white"
+                  onClick={openAdminPhoneReview}
+                >
+                  <Phone size={16} color="#FFFDF7" />
+                  <Text className="text-sm">手机号申请审核</Text>
                 </Button>
               </View>
             )}
@@ -1399,30 +1325,11 @@ const ProfilePage = () => {
                         onInput={(e) => setNewPhone(e.detail.value)}
                       />
                     </View>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={async () => {
-                        if (await sendChangeSms(newPhone)) {
-                          Taro.showToast({ title: '验证码已发送', icon: 'success' });
-                        }
-                      }}
-                    >
-                      <Text>获取验证码</Text>
-                    </Button>
                   </View>
                 </View>
-                <View>
-                  <Label><Text className="block text-sm text-stone-600 mb-1">短信验证码</Text></Label>
-                  <Input
-                    className="bg-stone-50"
-                    type="number"
-                    maxlength={6}
-                    value={changeCode}
-                    placeholder="请输入新手机号收到的验证码"
-                    onInput={(e) => setChangeCode(e.detail.value)}
-                  />
-                </View>
+                <Text className="block text-xs text-stone-400">
+                  提交后由家族管理员人工审核，审核通过后生效。
+                </Text>
               </>
             )}
           </View>
@@ -1458,7 +1365,7 @@ const ProfilePage = () => {
             </DialogTitle>
             <DialogDescription>
               <Text className="block">
-                已在新微信登录本小程序后，可将原家族的宗亲身份、权限与族谱数据迁移到新微信账号。请选择核验方式。
+                已在新微信登录本小程序后，可将原家族的宗亲身份、权限与族谱数据迁移到新微信账号。请填写原家族手机号并说明原因，由家族管理员人工审核后迁移。
               </Text>
             </DialogDescription>
           </DialogHeader>
@@ -1471,26 +1378,6 @@ const ProfilePage = () => {
                   当前微信：{userInfo?.nickname || userInfo?.username}（将接收原家族数据）
                 </Text>
               </View>
-            </View>
-
-            {/* 核验方式切换 */}
-            <View className="bg-stone-100 rounded-xl p-1 flex flex-row">
-              {(['sms', 'apply'] as const).map((m) => (
-                <Button
-                  key={m}
-                  variant={migrateMode === m ? 'default' : 'ghost'}
-                  className={
-                    migrateMode === m
-                      ? 'flex-1 bg-teal-800 text-white'
-                      : 'flex-1 text-stone-600'
-                  }
-                  onClick={() => setMigrateMode(m)}
-                >
-                  <Text className="text-sm">
-                    {m === 'sms' ? '原手机号可用' : '原手机号已不可用'}
-                  </Text>
-                </Button>
-              ))}
             </View>
 
             {/* 原手机号 */}
@@ -1506,42 +1393,21 @@ const ProfilePage = () => {
               />
             </View>
 
-            {migrateMode === 'sms' ? (
-              <View>
-                <Label><Text className="block text-sm text-stone-600 mb-1">短信验证码</Text></Label>
-                <View className="flex flex-row gap-2 items-end">
-                  <View className="flex-1 bg-stone-50 rounded-xl px-3 py-2">
-                    <Input
-                      className="w-full"
-                      type="number"
-                      maxlength={6}
-                      value={migrateCode}
-                      placeholder="原手机号收到的验证码"
-                      onInput={(e) => setMigrateCode(e.detail.value)}
-                    />
-                  </View>
-                  <Button size="sm" variant="outline" onClick={sendMigrateSms}>
-                    <Text>获取验证码</Text>
-                  </Button>
-                </View>
+            <View>
+              <Label><Text className="block text-sm text-stone-600 mb-1">迁移原因说明</Text></Label>
+              <View className="bg-stone-50 rounded-xl px-3 py-2">
+                <Textarea
+                  style={{ width: '100%', minHeight: '70px', backgroundColor: 'transparent' }}
+                  maxlength={200}
+                  value={migrateReason}
+                  placeholder="如更换微信号、原微信号丢失等，请简要说明情况，由管理员人工审核"
+                  onInput={(e) => setMigrateReason(e.detail.value)}
+                />
               </View>
-            ) : (
-              <View>
-                <Label><Text className="block text-sm text-stone-600 mb-1">迁移原因说明</Text></Label>
-                <View className="bg-stone-50 rounded-xl px-3 py-2">
-                  <Textarea
-                    style={{ width: '100%', minHeight: '70px', backgroundColor: 'transparent' }}
-                    maxlength={200}
-                    value={migrateReason}
-                    placeholder="如原手机号已停用，请说明情况，由管理员人工审核"
-                    onInput={(e) => setMigrateReason(e.detail.value)}
-                  />
-                </View>
-                <Text className="block text-xs text-stone-400 mt-1">
-                  提交后需家族管理员审核通过方可迁移。主管理员迁移将二次确认。
-                </Text>
-              </View>
-            )}
+              <Text className="block text-xs text-stone-400 mt-1">
+                提交后由家族管理员人工审核，审核通过后迁移。主管理员迁移将二次确认。
+              </Text>
+            </View>
 
             <View className="bg-amber-50 border border-amber-200 rounded-xl p-3">
               <Text className="block text-xs leading-5 text-amber-800">
@@ -1562,7 +1428,7 @@ const ProfilePage = () => {
               disabled={migrateLoading}
               onClick={confirmMigrate}
             >
-              <Text>{migrateLoading ? '处理中...' : migrateMode === 'sms' ? '验证并迁移' : '提交审核申请'}</Text>
+              <Text>{migrateLoading ? '处理中...' : '提交审核申请'}</Text>
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1632,6 +1498,101 @@ const ProfilePage = () => {
             <Button
               className="bg-stone-200 text-stone-700"
               onClick={() => setShowAdminMigrateReview(false)}
+            >
+              <Text>关闭</Text>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 管理员：手机号申请审核弹窗 */}
+      <Dialog open={showAdminPhoneReview} onOpenChange={setShowAdminPhoneReview}>
+        <DialogContent className="bg-[#FFFDF7] rounded-2xl max-h-[86vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Phone size={20} color="#134E4A" />
+              <Text>手机号申请审核</Text>
+            </DialogTitle>
+            <DialogDescription>
+              <Text className="block">
+                审核族人提交的手机号绑定 / 更换申请，通过后为对应账号写入新手机号（开放号不变，操作写入日志）。
+              </Text>
+            </DialogDescription>
+          </DialogHeader>
+
+          {phoneAppsLoading ? (
+            <View className="py-10 flex flex-col items-center gap-2">
+              <Text className="block text-sm text-stone-400">加载中...</Text>
+            </View>
+          ) : phoneApps.length === 0 ? (
+            <View className="py-10 flex flex-col items-center gap-2">
+              <Text className="block text-sm text-stone-400">暂无待处理的手机号申请</Text>
+            </View>
+          ) : (
+            <View className="flex flex-col gap-3">
+              {phoneApps.map((it) => (
+                <View key={it.id} className="bg-white border border-stone-200 rounded-xl p-4 flex flex-col gap-2">
+                  <View className="flex items-center justify-between">
+                    <Text className="block text-base font-semibold text-stone-800">
+                      {it.type === 'bind' ? '绑定手机号' : '更换手机号'}
+                    </Text>
+                    {it.status === 'pending' ? (
+                      <Badge className="bg-amber-100 text-amber-700">
+                        <Text>待审核</Text>
+                      </Badge>
+                    ) : it.status === 'approved' ? (
+                      <Badge className="bg-emerald-100 text-emerald-700">
+                        <Text>已通过</Text>
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-red-100 text-red-700">
+                        <Text>已驳回</Text>
+                      </Badge>
+                    )}
+                  </View>
+                  <Text className="block text-sm text-stone-600">
+                    新手机号：{it.new_phone || '-'}
+                  </Text>
+                  {it.old_phone && (
+                    <Text className="block text-sm text-stone-500">
+                      原手机号：{it.old_phone}
+                    </Text>
+                  )}
+                  {it.reason && (
+                    <Text className="block text-sm text-stone-500">
+                      说明：{it.reason}
+                    </Text>
+                  )}
+                  <Text className="block text-sm text-stone-400">
+                    {it.created_at ? `提交时间：${new Date(it.created_at).toLocaleString()}` : ''}
+                  </Text>
+                  {it.status === 'pending' && (
+                    <View className="flex flex-row gap-2 mt-1">
+                      <Button
+                        className="flex-1 bg-emerald-700 text-white"
+                        onClick={() => handleReviewPhone(it.id, true)}
+                      >
+                        <Check size={16} color="#FFFDF7" />
+                        <Text>通过</Text>
+                      </Button>
+                      <Button
+                        className="flex-1 bg-red-700 text-white"
+                        onClick={() => handleReviewPhone(it.id, false)}
+                      >
+                        <X size={16} color="#FFFDF7" />
+                        <Text>驳回</Text>
+                      </Button>
+                    </View>
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
+
+          <DialogFooter>
+            <Button
+              className="bg-stone-200 text-stone-700"
+              onClick={() => setShowAdminPhoneReview(false)}
             >
               <Text>关闭</Text>
             </Button>

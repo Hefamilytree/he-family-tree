@@ -10,19 +10,50 @@ export default function LoginPage() {
 
   const isMiniApp = [Taro.ENV_TYPE.WEAPP, Taro.ENV_TYPE.TT].includes(Taro.getEnv() as any);
 
+  /** 判定是否为测试环境（游客 AppID 或未绑定真实 AppID），此时 openid 无法由后端换取稳定标识 */
+  const getAppId = () => {
+    try {
+      const info: any = Taro.getAccountInfoSync?.();
+      const appId = info?.miniProgram?.appId || '';
+      return appId;
+    } catch (e) {
+      return '';
+    }
+  };
+
+  /** 测试环境下使用本地持久化的固定虚拟 openid，保证同一微信多次登录账号稳定不变 */
+  const getOrCreateDevOpenid = () => {
+    const KEY = 'dev_openid_fixed';
+    let openid = Taro.getStorageSync(KEY);
+    if (!openid) {
+      openid = 'devwx_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+      Taro.setStorageSync(KEY, openid);
+    }
+    return openid;
+  };
+
   /** 微信一键登录：仅 wx.login 获取 openid，不再强制手机号授权 */
   const onWxLogin = async () => {
     setWxLoading(true);
     try {
-      const loginRes: any = await Taro.login();
-      if (!loginRes?.code) {
-        Taro.showToast({ title: '获取微信标识失败', icon: 'none' });
-        return;
+      const appId = getAppId();
+      // 测试/预览环境（游客 AppID 或未配置真实 AppID）：直接传本地固定 openid，保证账号稳定且不新建重复记录
+      const isTourist = !appId || appId === 'touristappid' || appId.indexOf('wx') !== 0;
+      let payload: any;
+      if (isTourist) {
+        payload = { openid: getOrCreateDevOpenid(), nickname: '微信宗亲' };
+      } else {
+        const loginRes: any = await Taro.login();
+        if (!loginRes?.code) {
+          Taro.showToast({ title: '获取微信标识失败', icon: 'none' });
+          return;
+        }
+        payload = { loginCode: loginRes.code };
       }
       const res = await Network.request({
         url: '/api/auth/wx-login',
         method: 'POST',
-        data: { loginCode: loginRes.code },
+        data: payload,
       });
       console.log('WeChat login response:', res.data);
       if (res.data.code === 200) {
