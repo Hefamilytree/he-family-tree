@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Network } from '@/network';
 import { toLunarBirth } from '@/utils/lunar';
-import { getAuthUser, memberDetailVisible } from '@/utils/permission';
+import { getAuthUser, memberDetailVisible, isAdmin } from '@/utils/permission';
 import './index.css';
 
 interface FamilyInfo {
@@ -45,8 +45,10 @@ interface TreeNode {
 export default function FamilyTree() {
   const [family, setFamily] = useState<FamilyInfo | null>(null);
   const [roots, setRoots] = useState<TreeNode[]>([]);
-  // 未认证仅显示成员姓名（隐藏出生/简介/葬地等敏感信息）
+  // 未认证仅显示成员及配偶姓名（隐藏字辈/出生/简介/葬地等敏感信息）
   const detailVisible = memberDetailVisible(getAuthUser());
+  const authUser = getAuthUser();
+  const canEdit = isAdmin(authUser);
   const [loading, setLoading] = useState(true);
   const [zoom, setZoom] = useState(1);
 
@@ -99,10 +101,10 @@ export default function FamilyTree() {
     return (
       <View className="tree-node" key={node.id}>
         <View className="tree-node-content">
-          {/* 成员本人卡片（点击可直接编辑） */}
+          {/* 成员本人卡片（仅管理人员可点击编辑） */}
           <View
             className="tree-person-card"
-            onClick={() => handleEditMember(node)}
+            onClick={() => { if (canEdit) handleEditMember(node); }}
             style={{
               backgroundColor: node.gender === 'male' ? '#E3F2FD' : '#FCE4EC',
               border: `1px solid ${node.gender === 'male' ? '#90CAF9' : '#F48FB1'}`,
@@ -115,7 +117,7 @@ export default function FamilyTree() {
               {node.name}
               {node.is_alive === 'no' && <Text style={{ color: '#999' }}>（故）</Text>}
             </Text>
-            {node.generation_title && (
+            {detailVisible && node.generation_title && (
               <Text className="block text-xs text-center mt-1" style={{ color: '#8B2500' }}>
                 {node.generation_title}字辈
               </Text>
@@ -151,15 +153,15 @@ export default function FamilyTree() {
                   {sp.name}
                   {spouseStatusLabel(sp.status) ? `（${spouseStatusLabel(sp.status)}）` : ''}
                 </Text>
-                {(sp.birth_date || (sp.status === 'deceased' && sp.death_date)) && (
+                {detailVisible && (sp.birth_date || (sp.status === 'deceased' && sp.death_date)) && (
                   <Text className="block text-xs text-center" style={{ color: '#999' }}>
                     {(sp.birth_date ? toLunarBirth(sp.birth_date) : '') || '生失考'}{sp.status === 'deceased' ? `—${(sp.death_date ? toLunarBirth(sp.death_date) : '') || '卒失考'}` : ''}
                   </Text>
                 )}
-                {sp.status === 'deceased' && sp.burial_place && (
+                {detailVisible && sp.status === 'deceased' && sp.burial_place && (
                   <Text className="block text-xs text-center" style={{ color: '#999' }}>葬：{sp.burial_place}</Text>
                 )}
-                {sp.bio && <Text className="block text-xs text-center" style={{ color: '#999' }}>{sp.bio}</Text>}
+                {detailVisible && sp.bio && <Text className="block text-xs text-center" style={{ color: '#999' }}>{sp.bio}</Text>}
               </View>
             </View>
           ))}
@@ -195,9 +197,11 @@ export default function FamilyTree() {
               <Text className="text-xl font-bold" style={{ color: '#8B2500', fontFamily: 'STKaiti, KaiTi, serif' }}>
                 {family.family_name}宗亲树
               </Text>
-              <Button size="sm" onClick={handleAddMember}>
-                <Text className="text-xs">添加成员</Text>
-              </Button>
+              {canEdit && (
+                <Button size="sm" onClick={handleAddMember}>
+                  <Text className="text-xs">添加成员</Text>
+                </Button>
+              )}
             </View>
             {family.hall_name && (
               <Text className="block text-sm" style={{ color: '#6B5B4F' }}>

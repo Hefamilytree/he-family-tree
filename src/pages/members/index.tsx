@@ -677,28 +677,34 @@ export default function Members() {
                 <CardContent className="p-4">
                   <View className="flex items-start justify-between">
                     <View className="flex items-center gap-3 flex-1">
-                      <View className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: member.gender === 'male' ? '#E3F2FD' : '#FCE4EC' }}>
-                        <Text className="text-lg font-bold" style={{ color: member.gender === 'male' ? '#1565C0' : '#C62828' }}>
-                          {member.name.charAt(0)}
-                        </Text>
-                      </View>
+                      {detailVisible && (
+                        <View className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: member.gender === 'male' ? '#E3F2FD' : '#FCE4EC' }}>
+                          <Text className="text-lg font-bold" style={{ color: member.gender === 'male' ? '#1565C0' : '#C62828' }}>
+                            {member.name.charAt(0)}
+                          </Text>
+                        </View>
+                      )}
                       <View className="flex-1">
                         <View className="flex items-center gap-2 mb-1 flex-wrap">
                           <Text className="text-base font-bold" style={{ color: '#333' }}>{member.name}</Text>
-                          {member.courtesy_name ? (
+                          {detailVisible && member.courtesy_name ? (
                             <Text className="text-xs px-2 py-1 rounded" style={{ backgroundColor: '#EFE7DC', color: '#6B5B4F' }}>
                               字：{member.courtesy_name}
                             </Text>
                           ) : null}
-                          <Text className="text-xs px-2 py-1 rounded" style={{ backgroundColor: member.gender === 'male' ? '#E3F2FD' : '#FCE4EC', color: member.gender === 'male' ? '#1565C0' : '#C62828' }}>
-                            {member.gender === 'male' ? '男' : '女'}
-                          </Text>
+                          {detailVisible && (
+                            <Text className="text-xs px-2 py-1 rounded" style={{ backgroundColor: member.gender === 'male' ? '#E3F2FD' : '#FCE4EC', color: member.gender === 'male' ? '#1565C0' : '#C62828' }}>
+                              {member.gender === 'male' ? '男' : '女'}
+                            </Text>
+                          )}
                         </View>
-                        {member.parent_name && (
+                        {detailVisible && member.parent_name && (
                           <Text className="block text-xs" style={{ color: '#6B5B4F' }}>
                             父：{member.parent_name}
                           </Text>
                         )}
+                        {/* 未认证也显示配偶姓名 */}
+                        {renderSpouseText(member)}
                         {detailVisible && (
                           <View className="mt-1">
                             <Text className="block text-xs" style={{ color: '#999' }}>
@@ -715,7 +721,6 @@ export default function Members() {
                                 {member.generation_title}字辈
                               </Text>
                             )}
-                            {renderSpouseText(member)}
                             {member.birth_place && (
                               <Text className="block text-xs" style={{ color: '#6B5B4F' }}>
                                 出生地：{member.birth_place}
@@ -762,16 +767,16 @@ export default function Members() {
             <Text className="block text-xs" style={{ color: '#6B5B4F' }}>
               配偶：{s.name}{spouseStatusLabel(s.status) ? `（${spouseStatusLabel(s.status)}）` : ''}
             </Text>
-            {(s.birthDate || (s.status === 'deceased' && s.deathDate)) && (
+            {detailVisible && (s.birthDate || (s.status === 'deceased' && s.deathDate)) && (
               <Text className="block text-xs" style={{ color: '#999' }}>
                 {s.birthDate || '生失考'}{s.status === 'deceased' ? ` — ${s.deathDate || '卒失考'}` : ''}
               </Text>
             )}
-            {s.status === 'deceased' && s.burialPlace && (
+            {detailVisible && s.status === 'deceased' && s.burialPlace && (
               <Text className="block text-xs" style={{ color: '#999' }}>葬地：{s.burialPlace}</Text>
             )}
-            {s.bio && <Text className="block text-xs" style={{ color: '#999' }}>{s.bio}</Text>}
-            {s.phone && <Text className="block text-xs" style={{ color: '#999' }}>电话：{s.phone}</Text>}
+            {detailVisible && s.bio && <Text className="block text-xs" style={{ color: '#999' }}>{s.bio}</Text>}
+            {detailVisible && s.phone && <Text className="block text-xs" style={{ color: '#999' }}>电话：{s.phone}</Text>}
           </View>
         ))}
       </View>

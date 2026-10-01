@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Pencil, Trash2, Calendar, MapPin, Phone, PhoneCall } from 'lucide-react-taro';
 import { Network } from '@/network';
+import { getAuthUser, canEditBlock, canOperateItem, type BlockKey, type AuthUser } from '@/utils/permission';
 
 interface ContentItem {
   id: string;
@@ -19,6 +20,8 @@ interface ContentItem {
   note?: string | null;
   image_url?: string | null;
   sort_order?: number;
+  created_by?: string | null;
+  user_id?: string | null;
 }
 
 const SECTION_API_MAP: Record<string, string> = {
@@ -43,6 +46,17 @@ export default function SectionDetail() {
 
   const [items, setItems] = useState<ContentItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const authUser: AuthUser | null = getAuthUser();
+
+  // 分类映射到权限块：供需/产品对外开放查看，但编辑仍按角色
+  const permBlock: BlockKey =
+    category === 'supply_demand' ? 'supply'
+    : category === 'product' ? 'product'
+    : category === 'entrepreneur' ? 'economic'
+    : (section as BlockKey) || 'other';
+  const canAdd = canEditBlock(authUser, permBlock);
+  const canEditItem = (ownerId?: string | null) =>
+    canAdd && canOperateItem(authUser, ownerId);
 
   const apiUrl = SECTION_API_MAP[section] || '';
   const isEconomic = section === 'economic';
@@ -173,9 +187,11 @@ export default function SectionDetail() {
       {/* 标题栏 */}
       <View className="px-4 pt-4 pb-3 flex items-center justify-between">
         <Text className="text-xl font-bold" style={{ color: '#8B2500' }}>{title}</Text>
-        <Button size="sm" onClick={handleAdd}>
-          <Text className="text-sm">添加</Text>
-        </Button>
+        {canAdd && (
+          <Button size="sm" onClick={handleAdd}>
+            <Text className="text-sm">添加</Text>
+          </Button>
+        )}
       </View>
 
       {/* 内容列表 */}
@@ -187,7 +203,7 @@ export default function SectionDetail() {
         ) : items.length === 0 ? (
           <Card>
             <CardContent className="p-8 text-center">
-              <Text className="block text-gray-400 text-base">暂无内容，点击右上角添加</Text>
+              <Text className="block text-gray-400 text-base">暂无内容{canAdd ? '，点击右上角添加' : ''}</Text>
             </CardContent>
           </Card>
         ) : (
@@ -202,14 +218,16 @@ export default function SectionDetail() {
                       </Text>
                       <Text className="text-base font-bold" style={{ color: '#333' }}>{item.title}</Text>
                     </View>
-                    <View className="flex gap-2 ml-2">
-                      <View onClick={() => handleEdit(item)} className="p-1">
-                        <Pencil size={16} color="#8B2500" />
+                    {canEditItem(item.created_by || item.user_id) && (
+                      <View className="flex gap-2 ml-2">
+                        <View onClick={() => handleEdit(item)} className="p-1">
+                          <Pencil size={16} color="#8B2500" />
+                        </View>
+                        <View onClick={() => handleDelete(item.id)} className="p-1">
+                          <Trash2 size={16} color="#999" />
+                        </View>
                       </View>
-                      <View onClick={() => handleDelete(item.id)} className="p-1">
-                        <Trash2 size={16} color="#999" />
-                      </View>
-                    </View>
+                    )}
                   </View>
                   {renderMainBody(item)}
                 </CardContent>

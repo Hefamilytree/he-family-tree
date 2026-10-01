@@ -28,10 +28,11 @@ export class FamilyService {
       origin?: string | null;
     },
     creatorId?: string,
+    creatorRole?: string,
   ) {
     const client = this.getClient();
 
-    // 已有家族时，禁止再次创建（保证「唯一家族 + 唯一主管理员」）
+    // 已有家族时，禁止再次创建（保证「唯一家族」）
     const { data: existed } = await client
       .from('families')
       .select('id')
@@ -47,18 +48,14 @@ export class FamilyService {
       .single();
     if (error) throw new Error(`创建家族失败: ${error.message}`);
 
-    // 创建者自动成为本家族「唯一主管理员」
+    // 创建家族者即为本家族「唯一主管理员」：其余 super 降级为 admin，创建者置为 super
     if (creatorId) {
-      // 若历史上已存在 super（异常数据），先降级，保证唯一
       await client
         .from('users')
         .update({ role: 'admin' })
         .eq('role', 'super')
         .neq('id', creatorId);
-      await client
-        .from('users')
-        .update({ role: 'super' })
-        .eq('id', creatorId);
+      await client.from('users').update({ role: 'super' }).eq('id', creatorId);
     }
 
     return data;

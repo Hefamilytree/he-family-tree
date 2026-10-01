@@ -443,20 +443,86 @@ export class AuthService {
     };
   }
 
-  async setAdmin(operatorId: string, targetUserId: string) {
+  async listUsers(operatorId: string) {
+    const { data: operator } = await this.supabase
+      .from('users')
+      .select('role')
+      .eq('id', operatorId)
+      .single();
+    if (!operator || !['super', 'admin'].includes(operator.role)) {
+      return { code: 403, msg: '仅管理人员可查看用户列表', data: null };
+    }
+    const { data, error } = await this.supabase
+      .from('users')
+      .select('id, username, nickname, avatar_url, role, phone, member_id')
+      .order('created_at', { ascending: true });
+    if (error) return { code: 500, msg: '查询失败', data: null };
+    return { code: 200, msg: 'success', data };
+  }
+
+  async setAdmin(operatorId: string, targetUserId: string, revoke?: boolean) {
     if (!operatorId || operatorId === targetUserId) return { code: 400, msg: '参数不合法', data: null };
     const { data: operator } = await this.supabase.from('users').select('role').eq('id', operatorId).single();
     if (!operator || operator.role !== 'super') {
       return { code: 403, msg: '仅主管理人员可设置管理人员', data: null };
     }
+    const nextRole = revoke ? 'verified' : 'admin';
     const { data, error } = await this.supabase
       .from('users')
-      .update({ role: 'admin' })
+      .update({ role: nextRole })
       .eq('id', targetUserId)
       .select('id, username, role')
       .single();
     if (error || !data) return { code: 500, msg: '设置失败', data: null };
-    return { code: 200, msg: '已设置为管理人员', data: { id: data.id, username: data.username, role: data.role } };
+    await this.log(revoke ? 'revoke_admin' : 'set_admin', operatorId, targetUserId, {
+      target_role: nextRole,
+    });
+    return { code: 200, msg: revoke ? '已取消管理人员身份' : '已设置为管理人员', data: { id: data.id, username: data.username, role: data.role } };
+  }
+
+  /**
+   * 转让主管理员：
+   *  - 仅当前主管理员可操作
+   *  - 目标须为已认证宗亲/管理人员（不能是游客/未认证）
+   *  - 转让后：目标升为 super，原主管理员降为 admin；全程记录日志
+   */
+  async transferSuper(operatorId: string, targetUserId: string) {
+    if (!operatorId || !targetUserId || operatorId === targetUserId) {
+      return { code: 400, msg: '参数不合法（不能转让给自己）', data: null };
+    }
+    const { data: operator } = await this.supabase
+      .from('users')
+      .select('role')
+      .eq('id', operatorId)
+      .single();
+    if (!operator || operator.role !== 'super') {
+      return { code: 403, msg: '仅主管理人员可转让主管理员身份', data: null };
+    }
+    const { data: target } = await this.supabase
+      .from('users')
+      .select('id, username, role')
+      .eq('id', targetUserId)
+      .single();
+    if (!target) return { code: 404, msg: '目标用户不存在', data: null };
+    if (!['verified', 'admin'].includes(target.role)) {
+      return { code: 400, msg: '仅可转让给已认证宗亲或管理人员', data: null };
+    }
+
+    // 保证唯一：先把其余 super 降级，再置目标为 super
+    await this.supabase.from('users').update({ role: 'admin' }).eq('role', 'super');
+    const { data: updated, error } = await this.supabase
+      .from('users')
+      .update({ role: 'super' })
+      .eq('id', targetUserId)
+      .select('id, username, role')
+      .single();
+    if (error || !updated) return { code: 500, msg: '转让失败', data: null };
+
+    await this.log('transfer_super', operatorId, targetUserId, {
+      from_super: operatorId,
+      to_super: targetUserId,
+    });
+    return { code: 200, msg: '主管理员身份已转让', data: updated };
   }
 
   async linkMember(

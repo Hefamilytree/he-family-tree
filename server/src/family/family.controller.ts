@@ -31,9 +31,9 @@ export class FamilyController {
   ) {
     const token = (authorization || '').replace(/^Bearer\s+/i, '');
     if (!token) throw new UnauthorizedException('请先登录');
-    const decoded = this.authService.verifyToken(token) as { id: string };
-    if (!decoded?.id) throw new UnauthorizedException('登录已失效');
-    const data = await this.familyService.createFamily(body, decoded.id);
+    const decoded = this.authService.verifyToken(token) as { userId: string; role: string };
+    if (!decoded?.userId) throw new UnauthorizedException('登录已失效');
+    const data = await this.familyService.createFamily(body, decoded.userId, decoded.role);
     return { code: 200, msg: '创建成功', data };
   }
 

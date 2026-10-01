@@ -41,6 +41,20 @@ export class AuthController {
     return this.authService.getProfile(decoded.userId);
   }
 
+  // 用户列表：仅管理人员及以上可查看（用于设置/取消管理员、转让主管理员）
+  @Get('users')
+  async listUsers(@Headers('authorization') authorization: string) {
+    if (!authorization) {
+      return { code: 401, msg: '未登录', data: null };
+    }
+    const token = authorization.replace('Bearer ', '');
+    const decoded = this.authService.verifyToken(token) as any;
+    if (!decoded) {
+      return { code: 401, msg: 'token 无效或已过期', data: null };
+    }
+    return this.authService.listUsers(decoded.userId);
+  }
+
   @Put('profile')
   @HttpCode(HttpStatus.OK)
   async updateProfile(
@@ -65,6 +79,27 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async setAdmin(
     @Headers('authorization') authorization: string,
+    @Body() body: { userId: string; revoke?: boolean }
+  ) {
+    if (!authorization) {
+      return { code: 401, msg: '未登录', data: null };
+    }
+    const token = authorization.replace('Bearer ', '');
+    const decoded = this.authService.verifyToken(token) as any;
+    if (!decoded) {
+      return { code: 401, msg: 'token 无效或已过期', data: null };
+    }
+    const { userId, revoke } = body;
+    if (!userId) {
+      return { code: 400, msg: '用户 ID 不能为空', data: null };
+    }
+    return this.authService.setAdmin(decoded.userId, userId, revoke);
+  }
+
+  @Post('transfer-super')
+  @HttpCode(HttpStatus.OK)
+  async transferSuper(
+    @Headers('authorization') authorization: string,
     @Body() body: { userId: string }
   ) {
     if (!authorization) {
@@ -79,7 +114,7 @@ export class AuthController {
     if (!userId) {
       return { code: 400, msg: '用户 ID 不能为空', data: null };
     }
-    return this.authService.setAdmin(decoded.userId, userId);
+    return this.authService.transferSuper(decoded.userId, userId);
   }
 
   @Post('wx-login')

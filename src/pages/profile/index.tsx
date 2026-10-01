@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import AddressPicker from '@/components/address-picker';
 import {
   Dialog,
@@ -60,6 +61,11 @@ const ProfilePage = () => {
   const [showFamilyDialog, setShowFamilyDialog] = useState(false);
   const [creatingFamily, setCreatingFamily] = useState(false);
   const [familyExists, setFamilyExists] = useState(false);
+
+  // 主管理员操作（设置管理人员 / 转让主管理员）
+  const [showSuperActionDialog, setShowSuperActionDialog] = useState(false);
+  const [adminCandidates, setAdminCandidates] = useState<any[]>([]);
+  const [loadingAdminCandidates, setLoadingAdminCandidates] = useState(false);
   const [familyForm, setFamilyForm] = useState({
     surname: '',
     family_name: '',
@@ -301,44 +307,112 @@ const ProfilePage = () => {
     });
   };
 
+  // 加载可设为管理员/可转让的成员（认证宗亲或管理人员，排除自己）
+  const loadAdminCandidates = async () => {
+    setLoadingAdminCandidates(true);
+    try {
+      const token = Taro.getStorageSync('token');
+      const res = await Network.request({
+        url: '/api/auth/users',
+        header: { Authorization: `Bearer ${token}` },
+      });
+      const payload = res.data?.data;
+      const list: any[] = Array.isArray(payload) ? payload : (payload?.list || []);
+      setAdminCandidates(
+        list.filter(
+          (u) =>
+            u.id !== userInfo?.id &&
+            ['verified', 'admin'].includes(u.role),
+        ),
+      );
+    } catch (e) {
+      console.error('加载成员失败:', e);
+      Taro.showToast({ title: '加载失败', icon: 'none' });
+    } finally {
+      setLoadingAdminCandidates(false);
+    }
+  };
+
   const handleSetAdmin = () => {
     if (!isLoggedIn) {
       Taro.showToast({ title: '请先登录', icon: 'none' });
       return;
     }
+    if (userInfo?.role !== 'super') {
+      Taro.showToast({ title: '仅主管理人员可操作', icon: 'none' });
+      return;
+    }
+    setShowSuperActionDialog(true);
+    loadAdminCandidates();
+  };
 
-    Taro.showModal({
-      title: '设置管理员',
-      content: '确定要将当前用户设置为管理员吗？管理员可以编辑所有家族信息。',
-      success: async (modalRes) => {
-        if (modalRes.confirm) {
-          try {
-            const token = Taro.getStorageSync('token');
-            const apiRes = await Network.request({
-              url: '/api/auth/set-admin',
-              method: 'POST',
-              data: { userId: userInfo.id },
-              header: {
-                Authorization: `Bearer ${token}`,
-              },
-            });
-
-            if (apiRes.data.code === 200) {
-              // 更新本地用户信息
-              const updatedUser = { ...userInfo, role: 'admin' };
-              Taro.setStorageSync('userInfo', updatedUser);
-              setUserInfo(updatedUser);
-              Taro.showToast({ title: '已设置为管理员', icon: 'success' });
-            } else {
-              Taro.showToast({ title: apiRes.data.msg || '设置失败', icon: 'none' });
-            }
-          } catch (error) {
-            console.error('Set admin error:', error);
-            Taro.showToast({ title: '网络错误', icon: 'none' });
-          }
-        }
-      },
+  // 设置/取消某成员为管理人员
+  const handleToggleAdmin = async (target: any) => {
+    const makeAdmin = target.role !== 'admin';
+    const modal = await Taro.showModal({
+      title: makeAdmin ? '设为管理人员' : '取消管理人员',
+      content: makeAdmin
+        ? `确定将「${target.nickname || target.username}」设为管理人员吗？其将拥有所有板块编辑权限。`
+        : `确定取消「${target.nickname || target.username}」的管理人员身份吗？`,
     });
+    if (!modal.confirm) return;
+    try {
+      const token = Taro.getStorageSync('token');
+      const res = await Network.request({
+        url: '/api/auth/set-admin',
+        method: 'POST',
+        data: { userId: target.id, revoke: !makeAdmin },
+        header: { Authorization: `Bearer ${token}` },
+      });
+      if (res.data?.code === 200) {
+        Taro.showToast({ title: '操作成功', icon: 'success' });
+        loadAdminCandidates();
+      } else {
+        Taro.showToast({ title: res.data?.msg || '操作失败', icon: 'none' });
+      }
+    } catch (e) {
+      console.error('toggle admin error:', e);
+      Taro.showToast({ title: '网络错误', icon: 'none' });
+    }
+  };
+
+  // 转让主管理员（二次确认）
+  const handleTransferSuper = async (target: any) => {
+    const first = await Taro.showModal({
+      title: '转让主管理员',
+      content: `确定将主管理员身份转让给「${target.nickname || target.username}」吗？转让后您将成为普通管理人员，此操作需二次确认。`,
+      confirmText: '继续',
+    });
+    if (!first.confirm) return;
+    const second = await Taro.showModal({
+      title: '最终确认',
+      content: '再次确认：转让后管理权限立即转移，且全程记录日志。是否确认转让？',
+      confirmText: '确认转让',
+      confirmColor: '#C62828',
+    });
+    if (!second.confirm) return;
+    try {
+      const token = Taro.getStorageSync('token');
+      const res = await Network.request({
+        url: '/api/auth/transfer-super',
+        method: 'POST',
+        data: { userId: target.id },
+        header: { Authorization: `Bearer ${token}` },
+      });
+      if (res.data?.code === 200) {
+        // 原主管理员已降为 admin，更新本地登录态
+        const local = { ...userInfo, role: 'admin' };
+        Taro.setStorageSync('userInfo', local);
+        setUserInfo(local);
+        Taro.showToast({ title: '已转让主管理员身份', icon: 'success' });
+        setShowSuperActionDialog(false);
+      } else {
+        Taro.showToast({ title: res.data?.msg || '转让失败', icon: 'none' });
+      }
+    } catch (e) {
+      console.error('transfer super error:', e);
+      Taro.showToast({ title: '网络错误', icon: 'none' });
+    }
   };
 
   const handleOpenCreateFamily = () => {
@@ -1676,6 +1750,70 @@ const ProfilePage = () => {
               onClick={handleCreateFamily}
             >
               <Text>{creatingFamily ? '创建中...' : '创建'}</Text>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 主管理员操作：设置/取消管理人员、转让主管理员 */}
+      <Dialog open={showSuperActionDialog} onOpenChange={setShowSuperActionDialog}>
+        <DialogContent className="bg-[#FFFDF7] rounded-2xl max-h-[86vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield size={20} color="#B45309" />
+              <Text>主管理员操作</Text>
+            </DialogTitle>
+          </DialogHeader>
+
+          <View className="py-2">
+            {loadingAdminCandidates ? (
+              <View className="space-y-2">
+                {[1, 2].map((i) => <Skeleton key={i} className="h-14 w-full" />)}
+              </View>
+            ) : adminCandidates.length === 0 ? (
+              <Text className="block text-stone-400 text-sm text-center py-6">
+                暂无可操作的认证宗亲/管理人员
+              </Text>
+            ) : (
+              <View className="space-y-3">
+                {adminCandidates.map((u) => (
+                  <View key={u.id} className="rounded-xl border p-3" style={{ borderColor: '#E8E0D8' }}>
+                    <View className="flex items-center justify-between mb-2">
+                      <View>
+                        <Text className="block text-sm font-semibold text-stone-800">
+                          {u.nickname || u.username}
+                        </Text>
+                        <Text className="block text-xs text-stone-400">
+                          {u.role === 'admin' ? '管理人员' : '认证宗亲'}
+                        </Text>
+                      </View>
+                    </View>
+                    <View className="flex flex-row gap-2">
+                      <Button
+                        size="sm"
+                        variant={u.role === 'admin' ? 'outline' : 'default'}
+                        className="flex-1"
+                        onClick={() => handleToggleAdmin(u)}
+                      >
+                        <Text>{u.role === 'admin' ? '取消管理员' : '设为管理员'}</Text>
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="flex-1 bg-red-800 text-white"
+                        onClick={() => handleTransferSuper(u)}
+                      >
+                        <Text>转让主管理员</Text>
+                      </Button>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSuperActionDialog(false)}>
+              <Text>关闭</Text>
             </Button>
           </DialogFooter>
         </DialogContent>

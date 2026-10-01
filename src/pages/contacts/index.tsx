@@ -11,6 +11,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
+import { getAuthUser, permissionLevel } from '@/utils/permission';
 
 interface KinItem {
   id: string;
@@ -51,6 +52,11 @@ const ContactsPage: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<ContactForm>(emptyForm);
   const [saving, setSaving] = useState(false);
+  // 通讯录/附近宗亲：认证宗亲及以上可查看（游客/未认证拦截）；添加需管理人员
+  const authUser = getAuthUser();
+  const authLevel = permissionLevel(authUser);
+  const canAccess = authLevel >= 2;
+  const canAddContact = authLevel >= 3;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -240,6 +246,19 @@ const ContactsPage: React.FC = () => {
     );
   };
 
+  if (!canAccess) {
+    return (
+      <View className="min-h-full flex items-center justify-center p-8" style={{ backgroundColor: '#FAF8F5' }}>
+        <View className="text-center">
+          <Text className="block text-stone-500 text-base mb-2">暂无查看权限</Text>
+          <Text className="block text-stone-400 text-sm">
+            {authLevel === 0 ? '请先登录并完成宗亲认证' : '完成宗亲认证后即可查看'}{'\n'}如有疑问请联系家族管理人员
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View className="min-h-full pb-16" style={{ backgroundColor: '#FAF8F5' }}>
       {/* 标题栏 */}
@@ -248,12 +267,14 @@ const ContactsPage: React.FC = () => {
           {isNearby ? <Users size={18} color="#8B2500" /> : <TreePine size={18} color="#8B2500" />}
           <Text className="text-lg font-bold" style={{ color: '#8B2500' }}>{title}</Text>
         </View>
-        <Button size="sm" className="bg-red-800 text-white" onClick={openCreate}>
-          <View className="flex flex-row items-center gap-1">
-            <Plus size={15} color="#FFFDF7" />
-            <Text className="text-white text-sm">添加</Text>
-          </View>
-        </Button>
+        {canAddContact && (
+          <Button size="sm" className="bg-red-800 text-white" onClick={openCreate}>
+            <View className="flex flex-row items-center gap-1">
+              <Plus size={15} color="#FFFDF7" />
+              <Text className="text-white text-sm">添加</Text>
+            </View>
+          </Button>
+        )}
       </View>
       <View className="px-4 pb-3">
         <Text className="block text-xs text-stone-500">
@@ -275,11 +296,13 @@ const ContactsPage: React.FC = () => {
                 <UserPlus size={36} color="#A8A29E" />
               </View>
               <Text className="block text-stone-500 text-sm mb-4">
-                暂无宗亲，可点击右上角「添加」手动建立，族人完成认证后也会自动出现在这里。
+                暂无宗亲{canAddContact ? '，可点击右上角「添加」手动建立，族人完成认证后也会自动出现在这里。' : '，族人完成认证后会自动出现在这里。'}
               </Text>
-              <Button className="bg-red-800 text-white" onClick={openCreate}>
-                <Text>立即添加</Text>
-              </Button>
+              {canAddContact && (
+                <Button className="bg-red-800 text-white" onClick={openCreate}>
+                  <Text>立即添加</Text>
+                </Button>
+              )}
             </CardContent>
           </Card>
         ) : isNearby ? (
