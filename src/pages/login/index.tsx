@@ -32,37 +32,57 @@ export default function LoginPage() {
     return openid;
   };
 
+  /** 登录成功后落地登录态（缓存 token 与用户信息） */
+  const applyLogin = (data: any) => {
+    Taro.setStorageSync('token', data.token);
+    Taro.setStorageSync('userInfo', data.user);
+    Taro.showToast({ title: '登录成功', icon: 'success' });
+    setTimeout(() => Taro.navigateBack(), 1000);
+  };
+
   /** 微信一键登录：仅 wx.login 获取 openid，不再强制手机号授权 */
   const onWxLogin = async () => {
     setWxLoading(true);
     try {
       const appId = getAppId();
-      // 测试/预览环境（游客 AppID 或未配置真实 AppID）：直接传本地固定 openid，保证账号稳定且不新建重复记录
-      const isTourist = !appId || appId === 'touristappid' || appId.indexOf('wx') !== 0;
-      let payload: any;
-      if (isTourist) {
-        payload = { openid: getOrCreateDevOpenid(), nickname: '微信宗亲' };
-      } else {
-        const loginRes: any = await Taro.login();
-        if (!loginRes?.code) {
-          Taro.showToast({ title: '获取微信标识失败', icon: 'none' });
-          return;
+      // 需要真实微信 openid：优先用 wx.login 换取 code，由后端 code2Session 换取稳定 openid
+      // 适用于已绑定真实 AppID 且后端已配置 WX_APPID/WX_SECRET 的环境
+      const wantsRealOpenid = !!appId && appId !== 'touristappid' && appId.indexOf('wx') === 0;
+
+      // 首次使用 loginCode：成功后保持真实 openid；失败（如后端未配置微信凭证）则降级为本地固定 openid
+      if (wantsRealOpenid) {
+        try {
+          const loginRes: any = await Taro.login();
+          const code = loginRes?.code;
+          if (code) {
+            const res = await Network.request({
+              url: '/api/auth/wx-login',
+              method: 'POST',
+              data: { loginCode: code, nickname: '微信宗亲' },
+            });
+            console.log('WeChat login (real) response:', res.data);
+            if (res.data.code === 200) {
+              applyLogin(res.data.data);
+              return;
+            }
+            console.warn('loginCode 登录失败，降级为本地 openid 登录:', res.data.msg);
+          }
+        } catch (e) {
+          console.warn('wx.login/loginCode 异常，降级为本地 openid 登录:', e);
         }
-        payload = { loginCode: loginRes.code };
       }
-      const res = await Network.request({
+
+      // 测试/预览环境，或后端未配置微信凭证时的保底方案：直传本地固定 openid，账号稳定不重复新建
+      const res2 = await Network.request({
         url: '/api/auth/wx-login',
         method: 'POST',
-        data: payload,
+        data: { openid: getOrCreateDevOpenid(), nickname: '微信宗亲' },
       });
-      console.log('WeChat login response:', res.data);
-      if (res.data.code === 200) {
-        Taro.setStorageSync('token', res.data.data.token);
-        Taro.setStorageSync('userInfo', res.data.data.user);
-        Taro.showToast({ title: '登录成功', icon: 'success' });
-        setTimeout(() => Taro.navigateBack(), 1000);
+      console.log('WeChat login (dev) response:', res2.data);
+      if (res2.data.code === 200) {
+        applyLogin(res2.data.data);
       } else {
-        Taro.showToast({ title: res.data.msg || '微信登录失败', icon: 'none' });
+        Taro.showToast({ title: res2.data.msg || '微信登录失败', icon: 'none' });
       }
     } catch (error) {
       console.error('WeChat login error:', error);
