@@ -126,13 +126,9 @@ export default function LoginPage() {
         <View className="mt-6 flex items-start gap-2 bg-white rounded-xl p-4">
           <ShieldCheck size={18} color="#6B5B4F" className="mt-1 flex-shrink-0" />
           <Text className="block text-xs leading-5 text-stone-500 flex-1">
-            仅用于标识您的微信身份并登录族谱，登录环节不再强制获取手机号。手机号可在登录后在「我的-账号与安全」中自愿绑定，用于族人联络与账号找回。登录即代表您已阅读并同意《隐私政策》。
+            登录即代表您已阅读并同意《隐私政策》。手机号可在登录后自愿绑定，用于族人联络与账号找回。
           </Text>
         </View>
-
-        <Text className="block text-xs text-stone-400 text-center mt-4">
-          一个微信号仅可创建一个账号，账号与微信号永久绑定
-        </Text>
       </View>
     </View>
   );

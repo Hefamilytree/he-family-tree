@@ -12,8 +12,16 @@ export class CulturalService {
     );
   }
 
-  async findByCategory(category: string) {
-    const { data, error } = await this.supabase
+  async findFamilyId() {
+    const { data } = await this.supabase
+      .from('families')
+      .select('id')
+      .order('created_at', { ascending: false })
+      .limit(1);
+    return data && data.length > 0 ? data[0].id : null;
+  }
+
+  async findByCategory(category: string) {    const { data, error } = await this.supabase
       .from('cultural_heritage')
       .select('*')
       .eq('category', category)

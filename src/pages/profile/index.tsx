@@ -19,7 +19,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Network } from '@/network';
-import { isAdmin, isSuper } from '@/utils/permission';
+import { isAdmin, isSuper, permissionLevel } from '@/utils/permission';
 
 const roleLabel = (role?: string) => {
   const r = (role || '').toLowerCase();
@@ -96,9 +96,8 @@ const ProfilePage = () => {
 
   // ===== 账号与安全：手机号绑定 / 更换 / 微信账号迁移 =====
   const [showAccountDialog, setShowAccountDialog] = useState(false);
-  // 手机号绑定（新绑）
-  const [bindPhone, setBindPhone] = useState('');
-  const [bindLoading, setBindLoading] = useState(false);
+  // 手机号绑定（新弹已合并到完善宗亲信息，保留占位供禁用态）
+  const bindLoading = false;
   // 更换手机号
   const [showChangePhone, setShowChangePhone] = useState(false);
   const [oldPhone, setOldPhone] = useState('');
@@ -276,7 +275,7 @@ const ProfilePage = () => {
   };
 
   const handleClearData = () => {
-    if (!isLoggedIn || userInfo?.role !== 'admin') {
+    if (!isLoggedIn || userInfo?.role !== 'super') {
       Taro.showToast({ title: '仅主管理员可操作', icon: 'none' });
       return;
     }
@@ -344,6 +343,34 @@ const ProfilePage = () => {
     }
     setShowSuperActionDialog(true);
     loadAdminCandidates();
+  };
+
+  // 管理人员自行辞职
+  const handleResignAdmin = async () => {
+    const modal = await Taro.showModal({
+      title: '辞去管理人员',
+      content: '确定辞去管理人员身份吗？辞职后将成为认证宗亲。',
+    });
+    if (!modal.confirm) return;
+    try {
+      const token = Taro.getStorageSync('token');
+      const res = await Network.request({
+        url: '/api/auth/resign-admin',
+        method: 'POST',
+        header: { Authorization: `Bearer ${token}` },
+      });
+      if (res.data?.code === 200) {
+        const local = { ...userInfo, role: 'verified' };
+        Taro.setStorageSync('userInfo', local);
+        setUserInfo(local);
+        Taro.showToast({ title: '已辞去管理人员', icon: 'success' });
+      } else {
+        Taro.showToast({ title: res.data?.msg || '操作失败', icon: 'none' });
+      }
+    } catch (e) {
+      console.error('resign admin error:', e);
+      Taro.showToast({ title: '网络错误', icon: 'none' });
+    }
   };
 
   // 设置/取消某成员为管理人员
@@ -580,36 +607,6 @@ const ProfilePage = () => {
   };
 
   // ===== 手机号绑定（申请-审核制） =====
-  const handleBindPhone = async () => {
-    if (!/^1\d{10}$/.test(bindPhone.trim())) {
-      Taro.showToast({ title: '请填写正确的手机号', icon: 'none' });
-      return;
-    }
-    setBindLoading(true);
-    try {
-      const token = Taro.getStorageSync('token');
-      const res = await Network.request({
-        url: '/api/auth/phone-apply',
-        method: 'POST',
-        data: { type: 'bind', newPhone: bindPhone.trim() },
-        header: { Authorization: `Bearer ${token}` },
-      });
-      console.log('绑定手机号申请:', res.data);
-      if (res.data?.code === 200) {
-        setShowAccountDialog(false);
-        setBindPhone('');
-        Taro.showToast({ title: '绑定申请已提交，等待管理员审核', icon: 'success' });
-      } else {
-        Taro.showToast({ title: res.data?.msg || '提交失败', icon: 'none' });
-      }
-    } catch (e) {
-      console.error('绑定申请失败:', e);
-      Taro.showToast({ title: '网络错误', icon: 'none' });
-    } finally {
-      setBindLoading(false);
-    }
-  };
-
   // ===== 更换手机号（申请-审核制；本人变更提交申请，管理员走 handleAdminChangePhone） =====
   const handleChangePhone = async () => {
     if (!/^1\d{10}$/.test(oldPhone.trim())) {
@@ -931,7 +928,7 @@ const ProfilePage = () => {
           </Card>
         )}
 
-        {/* 管理员功能：仅主管理人员可设置管理人员 */}
+        {/* 管理员功能：仅主管理人员可设置/撤销管理人员、转让主管理员 */}
         {isLoggedIn && isSuper(userInfo) && (
           <Card
             className="bg-amber-100 border-amber-300 active:opacity-80"
@@ -943,16 +940,37 @@ const ProfilePage = () => {
               </View>
               <View className="flex-1">
                 <Text className="block text-base font-semibold text-stone-800">
-                  管理人员设置
+                  管理人员与主管理员转让
                 </Text>
                 <Text className="block text-sm text-stone-500">
-                  仅主管理人员可设置管理人员，其它人无权设置
+                  授权 / 撤销管理人员，或将主管理员转让给认证宗亲
                 </Text>
               </View>
             </CardContent>
           </Card>
         )}
 
+        {/* 管理人员自行辞职：仅 admin 可见（主管理员须先转让） */}
+        {isLoggedIn && userInfo?.role === 'admin' && (
+          <Card
+            className="bg-stone-50 border-stone-200 active:opacity-80"
+            onClick={handleResignAdmin}
+          >
+            <CardContent className="p-4 flex items-center gap-3">
+              <View className="w-10 h-10 rounded-full bg-stone-600 flex items-center justify-center">
+                <Shield size={20} color="#FFFDF7" />
+              </View>
+              <View className="flex-1">
+                <Text className="block text-base font-semibold text-stone-800">
+                  辞去管理人员
+                </Text>
+                <Text className="block text-sm text-stone-500">
+                  辞职后成为认证宗亲，保留族谱身份
+                </Text>
+              </View>
+            </CardContent>
+          </Card>
+        )}
 
         <Card
           className="bg-stone-50 border-stone-200 active:opacity-80"
@@ -981,6 +999,7 @@ const ProfilePage = () => {
           </CardContent>
         </Card>
 
+        {isLoggedIn && !userInfo?.member_id && (
         <Card
           className="bg-red-900 border-red-800 text-white active:opacity-80"
           onClick={handleOpenLink}
@@ -994,14 +1013,15 @@ const ProfilePage = () => {
                 完善宗亲信息
               </Text>
               <Text className="block text-sm text-red-100">
-                {userInfo?.member_name
-                  ? `已关联：${userInfo.member_name}（点击重新关联）`
-                  : '登录后关联宗亲树人员，完善您的族谱身份'}
+                选择宗亲树中的本人、填写父辈与手机号，认证后自动加入通讯录
               </Text>
             </View>
           </CardContent>
         </Card>
+        )}
 
+        {/* 申请加入家族：仅游客 / 未认证成员可见，认证宗亲及以上不显示 */}
+        {(!isLoggedIn || permissionLevel(userInfo) < 2) && (
         <Card
           className="bg-amber-50 border-stone-200 active:opacity-80"
           onClick={handleOpenApply}
@@ -1020,6 +1040,29 @@ const ProfilePage = () => {
             </View>
           </CardContent>
         </Card>
+        )}
+
+        {/* 辞去管理员：普通管理员可见，主管理员需先转让 */}
+        {isLoggedIn && userInfo.role === 'admin' && (
+        <Card
+          className="bg-orange-50 border-orange-200 active:opacity-80"
+          onClick={handleResignAdmin}
+        >
+          <CardContent className="p-4 flex items-center gap-3">
+            <View className="w-10 h-10 rounded-full bg-orange-600 flex items-center justify-center">
+              <LogOut size={20} color="#FFFDF7" />
+            </View>
+            <View className="flex-1">
+              <Text className="block text-base font-semibold text-stone-800">
+                辞去管理员
+              </Text>
+              <Text className="block text-sm text-stone-500">
+                辞去后成为认证宗亲，不再拥有管理权限
+              </Text>
+            </View>
+          </CardContent>
+        </Card>
+        )}
 
         {isLoggedIn && isAdmin(userInfo) && (
           <Card
@@ -1162,6 +1205,17 @@ const ProfilePage = () => {
                 </View>
 
                 <View>
+                  <Label><Text className="block text-sm text-stone-600 mb-1">父辈姓名</Text></Label>
+                  <View className="bg-stone-50 rounded-xl px-3 py-2">
+                    <Text className="block text-sm text-stone-700">
+                      {(selectedMember as any).parent_name ||
+                        (allMembers.find((x: any) => x.id === (selectedMember as any).parent_id)?.name) ||
+                        '未关联父辈（可不填）'}
+                    </Text>
+                  </View>
+                </View>
+
+                <View>
                   <Label><Text className="block text-sm text-stone-600 mb-1">手机号码（必填）</Text></Label>
                   <Input
                     className="bg-stone-50"
@@ -1233,34 +1287,19 @@ const ProfilePage = () => {
               )}
             </View>
 
-            {/* 绑定手机号 */}
+            {/* 绑定手机号：与「完善宗亲信息」合并，填写姓名/父辈/手机后自动加入通讯录 */}
             {!userInfo?.phone && (
-              <View className="bg-white border border-stone-200 rounded-xl p-4 flex flex-col gap-2">
-                <Text className="block text-sm font-semibold text-stone-700">绑定手机号</Text>
-                <View className="flex flex-row gap-2">
-                  <View className="flex-1 bg-stone-50 rounded-xl px-3 py-2">
-                    <Input
-                      className="w-full"
-                      type="number"
-                      maxlength={11}
-                      value={bindPhone}
-                      placeholder="11位手机号"
-                      onInput={(e) => setBindPhone(e.detail.value)}
-                    />
-                  </View>
-                  <Button
-                    size="sm"
-                    className="bg-teal-800 text-white"
-                    disabled={bindLoading}
-                    onClick={handleBindPhone}
-                  >
-                    <Text>{bindLoading ? '提交中...' : '提交申请'}</Text>
-                  </Button>
-                </View>
-                <Text className="block text-xs text-stone-400">
-                  提交后由家族管理员人工审核，审核通过后生效。
-                </Text>
-              </View>
+              <Button
+                className="w-full bg-teal-800 text-white"
+                disabled={bindLoading}
+                onClick={() => {
+                  setShowAccountDialog(false);
+                  setTimeout(() => handleOpenLink(), 200);
+                }}
+              >
+                <Phone size={16} color="#FFF" />
+                <Text className="text-sm ml-1">绑定手机号（完善宗亲信息）</Text>
+              </Button>
             )}
 
             {/* 更换手机号 */}

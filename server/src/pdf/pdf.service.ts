@@ -3,6 +3,7 @@ import { join } from 'path';
 import { existsSync } from 'fs';
 import * as PDFDocument from 'pdfkit';
 import { getSupabaseClient } from '../storage/database/supabase-client';
+import { bySeniority } from '@/common/seniority';
 import { toLunar, currentGanZhiYear, drawVertical, drawSidebar, toChineseNum, toSquareBrackets } from './pdf.helpers';
 
 interface RawMember {
@@ -18,6 +19,7 @@ interface RawMember {
   bio?: string | null;
   burial_place?: string | null;
   is_alive?: string;
+  created_at?: string | null;
   spouses?: any[];
 }
 
@@ -150,7 +152,7 @@ export class PdfService {
       toAncestor: (query.toAncestor ?? '1') !== '0',
       startGen: Number.isNaN(startGen as number) ? undefined : startGen,
       endGen: Number.isNaN(endGen as number) ? undefined : endGen,
-    }).sort((a, b) => a.generation - b.generation);
+    }).sort(bySeniority);
 
     const cultural: CulturalItem[] = culRes.data || [];
     const byCat = (cat: string) => cultural.filter((c) => c.category === cat);
@@ -238,6 +240,11 @@ export class PdfService {
       // 左下重修纪年：模板无明显左列副文，仅保留纪年（底缘偏下）
       const dateText = `${ganzhi}年重修`;
       drawVertical(doc, dateText, { rightX: 170, leftX: 100, topY: 1187 - Array.from(dateText).length * 54, bottomY: 1187, fontSize: 30, color: '#111111' });
+
+      // 主框左侧上下副文（竖排）：上「宗族源远」、下「世代绵延」
+      const sideFs = 34;
+      drawVertical(doc, '宗族源远', { rightX: 440, leftX: 380, topY: boxT + 30, bottomY: 640, fontSize: sideFs, color: '#111111' });
+      drawVertical(doc, '世代绵延', { rightX: 440, leftX: 380, topY: 760, bottomY: boxB - 30, fontSize: sideFs, color: '#111111' });
     }
 
     // ===== 2. 前言（封面之后、目录之前） =====

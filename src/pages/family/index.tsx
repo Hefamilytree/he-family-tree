@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { View, Text, ScrollView } from '@tarojs/components';
+import { useState, useRef } from 'react';
+import { View, Text } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import { TreePine } from 'lucide-react-taro';
 import { Button } from '@/components/ui/button';
@@ -51,6 +51,65 @@ export default function FamilyTree() {
   const canEdit = isAdmin(authUser);
   const [loading, setLoading] = useState(true);
   const [zoom, setZoom] = useState(1);
+  const [translate, setTranslate] = useState({ x: 0, y: 0 });
+  const touchRef = useRef({
+    mode: '' as '' | 'pan' | 'pinch',
+    startX: 0,
+    startY: 0,
+    startTx: 0,
+    startTy: 0,
+    startDist: 0,
+    startZoom: 1,
+  });
+
+  const clampZoom = (v: number) => Math.min(3, Math.max(0.5, +v.toFixed(2)));
+
+  const getDistance = (t0: any, t1: any) => {
+    const dx = t0.clientX - t1.clientX;
+    const dy = t0.clientY - t1.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  const onTouchStart = (e: any) => {
+    const touches = e.touches || [];
+    const ref = touchRef.current;
+    if (touches.length === 2) {
+      ref.mode = 'pinch';
+      ref.startDist = getDistance(touches[0], touches[1]);
+      ref.startZoom = zoom;
+    } else if (touches.length === 1) {
+      ref.mode = 'pan';
+      ref.startX = touches[0].clientX;
+      ref.startY = touches[0].clientY;
+      ref.startTx = translate.x;
+      ref.startTy = translate.y;
+    }
+  };
+
+  const onTouchMove = (e: any) => {
+    const touches = e.touches || [];
+    const ref = touchRef.current;
+    if (ref.mode === 'pinch' && touches.length === 2) {
+      const dist = getDistance(touches[0], touches[1]);
+      if (ref.startDist > 0) {
+        setZoom(clampZoom(ref.startZoom * (dist / ref.startDist)));
+      }
+    } else if (ref.mode === 'pan' && touches.length === 1) {
+      setTranslate({
+        x: ref.startTx + (touches[0].clientX - ref.startX),
+        y: ref.startTy + (touches[0].clientY - ref.startY),
+      });
+    }
+  };
+
+  const onTouchEnd = () => {
+    touchRef.current.mode = '';
+  };
+
+  const resetView = () => {
+    setZoom(1);
+    setTranslate({ x: 0, y: 0 });
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -234,29 +293,45 @@ export default function FamilyTree() {
         ) : (
           <View>
             {/* 缩放控制栏 */}
-            <View className="flex items-center justify-between mb-2 px-1" style={{ position: 'sticky', top: 0, zIndex: 20, backgroundColor: '#FAF8F5' }}>
-              <Text className="text-xs" style={{ color: '#8B2500' }}>
-                缩小 / 放大查看宗亲树（{Math.round(zoom * 100)}%）
+            <View
+              className="flex items-center justify-between mb-2 px-1"
+              style={{ position: 'sticky', top: 0, zIndex: 20, backgroundColor: '#FAF8F5' }}
+            >
+              <Text className="block text-xs" style={{ color: '#8B2500' }}>
+                双指捏合或拖动查看（{Math.round(zoom * 100)}%）
               </Text>
               <View className="flex items-center gap-1">
-                <Button size="sm" className="px-2" onClick={() => setZoom(z => Math.max(0.5, +(z - 0.15).toFixed(2)))}>
+                <Button size="sm" className="px-2" onClick={() => setZoom(z => clampZoom(z - 0.15))}>
                   <Text className="text-xs">−</Text>
                 </Button>
-                <Button size="sm" className="px-2" onClick={() => setZoom(z => Math.min(3, +(z + 0.15).toFixed(2)))}>
+                <Button size="sm" className="px-2" onClick={() => setZoom(z => clampZoom(z + 0.15))}>
                   <Text className="text-xs">＋</Text>
                 </Button>
-                <Button size="sm" variant="outline" className="px-2" onClick={() => setZoom(1)}>
+                <Button size="sm" variant="outline" className="px-2" onClick={resetView}>
                   <Text className="text-xs">复位</Text>
                 </Button>
               </View>
             </View>
-            <ScrollView scrollX className="w-full" enhanced showScrollbar={false}>
-              <View style={{ width: `${zoom * 100}%`, transform: `scale(${zoom})`, transformOrigin: 'top left' }}>
-                <View className="tree-canvas" style={{ backgroundColor: '#FFFDF7', border: '1px solid #E8E0D8', borderRadius: '12px', padding: '24px 20px', minWidth: '100%' }}>
+            <View
+              className="tree-viewport"
+              onTouchStart={onTouchStart}
+              onTouchMove={onTouchMove}
+              onTouchEnd={onTouchEnd}
+            >
+              <View
+                className="tree-scaler"
+                style={{
+                  transform: `translate(${translate.x}px, ${translate.y}px) scale(${zoom})`,
+                }}
+              >
+                <View
+                  className="tree-canvas"
+                  style={{ backgroundColor: '#FFFDF7', border: '1px solid #E8E0D8', borderRadius: '12px', padding: '24px 20px' }}
+                >
                   {roots.map(root => renderNode(root))}
                 </View>
               </View>
-            </ScrollView>
+            </View>
           </View>
         )}
       </View>

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { bySeniority, sortTreeBySeniority } from '@/common/seniority';
 
 @Injectable()
 export class MembersService {
@@ -38,12 +39,11 @@ export class MembersService {
     const { data, error } = await client
       .from('members')
       .select('id, family_id, name, courtesy_name, gender, birth_date, birth_time, phone, death_date, parent_id, spouse_name, generation, generation_title, bio, is_alive, birth_place, burial_place, created_at, updated_at')
-      .eq('family_id', familyId)
-      .order('generation', { ascending: true })
-      .order('name', { ascending: true });
+      .eq('family_id', familyId);
     if (error) throw new Error(`查询成员失败: ${error.message}`);
 
-    const members = data || [];
+    // 长幼有序：按世代、出生早迟自动排序（不依赖姓名排序）
+    const members = (data || []).sort(bySeniority);
 
     // 查询所有配偶信息并按成员分组
     const spousesData = members.length === 0 ? [] : (
@@ -129,7 +129,7 @@ export class MembersService {
       }
     }
 
-    return roots;
+    return sortTreeBySeniority(roots);
   }
 
   async createMember(payload: {

@@ -525,6 +525,33 @@ export class AuthService {
     return { code: 200, msg: '主管理员身份已转让', data: updated };
   }
 
+  /**
+   * 管理人员自行辞职：
+   *  - 仅 role=admin 的用户可对自己操作（主管理人员须先转让，不能直接辞职）
+   *  - 辞职后降为「认证宗亲」，保留 member_id 关联；记录日志
+   */
+  async resignAdmin(userId: string) {
+    if (!userId) return { code: 400, msg: '参数不合法', data: null };
+    const { data: user } = await this.supabase
+      .from('users')
+      .select('id, username, role, member_id')
+      .eq('id', userId)
+      .single();
+    if (!user) return { code: 404, msg: '用户不存在', data: null };
+    if (user.role !== 'admin') {
+      return { code: 400, msg: '仅管理人员可辞职；主管理人员请先转让主管理员身份', data: null };
+    }
+    const { data, error } = await this.supabase
+      .from('users')
+      .update({ role: 'verified' })
+      .eq('id', userId)
+      .select('id, username, role')
+      .single();
+    if (error || !data) return { code: 500, msg: '辞职失败', data: null };
+    await this.log('resign_admin', userId, userId, {});
+    return { code: 200, msg: '已辞去管理人员身份', data };
+  }
+
   async linkMember(
     userId: string,
     memberId: string,

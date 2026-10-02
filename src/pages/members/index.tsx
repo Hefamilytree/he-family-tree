@@ -647,8 +647,8 @@ export default function Members() {
         </View>
       )}
 
-      {/* 添加按钮 */}
-      {!showAddForm && (
+      {/* 添加按钮：仅管理员可添加成员 */}
+      {!showAddForm && canManage && (
         <View className="px-4 mb-4">
           <Button className="w-full" style={{ backgroundColor: '#8B2500', color: '#FFFDF7' }} onClick={handleAdd}>
             <Plus size={16} color="#FFFDF7" />
