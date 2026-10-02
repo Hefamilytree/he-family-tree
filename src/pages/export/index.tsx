@@ -35,7 +35,7 @@ export default function Export() {
   const [family, setFamily] = useState<FamilyInfo | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
-  const [exportMode, setExportMode] = useState<'full' | 'branch'>('full');
+  const [exportMode, setExportMode] = useState<'full' | 'branch' | 'siblings'>('full');
   const [selectedBranch, setSelectedBranch] = useState<string>('');
   const [includeAncestor, setIncludeAncestor] = useState(false);
   const [startGen, setStartGen] = useState('');
@@ -82,11 +82,35 @@ export default function Export() {
     return result;
   };
 
+  // 父辈所有亲兄弟：以所选宗亲为基准，取其父亲的全部子女（含本人与所有亲兄弟），
+  // 并向上带上父亲本人，使打印脉络完整；数据全部关联成员表。
+  const getFatherSiblings = (baseId: string): Member[] => {
+    if (!baseId) return [];
+    const base = members.find((m) => m.id === baseId);
+    if (!base) return [];
+    const fatherId = base.parent_id;
+    let father: Member | undefined;
+    let anchorId = fatherId;
+    if (fatherId) {
+      father = members.find((m) => m.id === fatherId);
+    } else {
+      // 所选人本身即父辈：以本人为锚，取与其同父者
+      father = base;
+      anchorId = base.id;
+    }
+    const siblings = anchorId
+      ? members.filter((m) => m.parent_id === anchorId)
+      : [base];
+    return father ? [father, ...siblings] : siblings;
+  };
+
   const exportMembers = exportMode === 'full'
     ? members
-    : selectedBranch
-      ? getBranchMembers(selectedBranch)
-      : [];
+    : exportMode === 'siblings'
+      ? getFatherSiblings(selectedBranch)
+      : selectedBranch
+        ? getBranchMembers(selectedBranch)
+        : [];
 
   // 按世代分组
   const generations: Record<number, Member[]> = {};
@@ -145,13 +169,24 @@ export default function Export() {
                 <Text className="text-sm font-bold" style={{ color: exportMode === 'branch' ? '#8B2500' : '#6B5B4F' }}>分支族谱</Text>
                 <Text className="text-xs mt-1" style={{ color: '#999' }}>导出指定分支</Text>
               </View>
+              <View
+                className="flex-1 p-4 rounded-xl border-2 flex flex-col items-center"
+                style={{ borderColor: exportMode === 'siblings' ? '#8B2500' : '#E8E0D8', backgroundColor: exportMode === 'siblings' ? '#FFF5F0' : '#FFFDF7' }}
+                onClick={() => setExportMode('siblings')}
+              >
+                <Users size={32} color={exportMode === 'siblings' ? '#8B2500' : '#999'} className="mb-2" />
+                <Text className="text-sm font-bold" style={{ color: exportMode === 'siblings' ? '#8B2500' : '#6B5B4F' }}>父辈亲兄弟</Text>
+                <Text className="text-xs mt-1" style={{ color: '#999' }}>打印父辈及亲兄弟</Text>
+              </View>
             </View>
           </View>
 
-          {/* 分支选择 */}
-          {exportMode === 'branch' && branches.length > 0 && (
+          {/* 基准宗亲选择（分支族谱 / 父辈亲兄弟共用） */}
+          {(exportMode === 'branch' || exportMode === 'siblings') && branches.length > 0 && (
             <View className="mb-4">
-              <Text className="block text-sm mb-2" style={{ color: '#6B5B4F' }}>选择分支</Text>
+              <Text className="block text-sm mb-2" style={{ color: '#6B5B4F' }}>
+                {exportMode === 'siblings' ? '选择宗亲（以此人的父辈亲兄弟为准）' : '选择分支'}
+              </Text>
               <ScrollView scrollX className="flex gap-2 pb-2">
                 {branches.map(branch => (
                   <View

@@ -68,6 +68,16 @@ export class MembersService {
     }));
   }
 
+  /** 血缘行：供2代亲属鉴权使用（不限家族，便于边界判定） */
+  async getKinRows(): Promise<{ id: string; parent_id: string | null; user_id: string | null }[]> {
+    const client = this.getClient();
+    const { data, error } = await client
+      .from('members')
+      .select('id, parent_id, user_id');
+    if (error) throw new Error(`查询血缘失败: ${error.message}`);
+    return (data || []).map((m) => ({ id: m.id, parent_id: m.parent_id ?? null, user_id: m.user_id ?? null }));
+  }
+
   async getMemberCount() {
     const familyId = await this.getFamilyId();
     if (!familyId) return 0;

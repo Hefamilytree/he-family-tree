@@ -37,8 +37,7 @@ interface Member {
   death_date?: string;
   generation?: number;
   generation_title?: string;
-  father_id?: string;
-  mother_id?: string;
+  parent_id?: string;
   spouse_name?: string;
   birth_place?: string;
   bio?: string;
@@ -121,14 +120,25 @@ const ExportPreviewPage: React.FC = () => {
       setFamily(fam);
 
       let filtered = [...allMembers];
-      if (exportMode === 'branch' && branchId) {
+      if (exportMode === 'siblings' && branchId) {
+        // 父辈所有亲兄弟：取基准宗亲之父 + 其父全部子女（本人及亲兄弟）
+        const base = allMembers.find((m) => m.id === branchId);
+        if (base) {
+          const anchorId = (base as any).parent_id || base.id;
+          const siblings = allMembers.filter((m) => (m as any).parent_id === anchorId);
+          const father = allMembers.find((m) => m.id === anchorId);
+          const set = new Set<string>(siblings.map((m) => m.id));
+          if (father) set.add(father.id);
+          filtered = allMembers.filter((m) => set.has(m.id));
+        }
+      } else if (exportMode === 'branch' && branchId) {
         if (includeAncestor) {
           const ancestorIds = new Set<string>();
           let cur = allMembers.find((m) => m.id === branchId);
           let guard = 0;
-          while (cur && cur.father_id && guard < 50) {
-            ancestorIds.add(cur.father_id);
-            cur = allMembers.find((m) => m.id === cur!.father_id);
+          while (cur && (cur as any).parent_id && guard < 50) {
+            ancestorIds.add((cur as any).parent_id);
+            cur = allMembers.find((m) => m.id === (cur as any).parent_id);
             guard += 1;
           }
           const down = new Set<string>([branchId]);
@@ -136,7 +146,8 @@ const ExportPreviewPage: React.FC = () => {
           while (changed) {
             changed = false;
             allMembers.forEach((m) => {
-              if ((m.father_id && down.has(m.father_id)) || (m.mother_id && down.has(m.mother_id))) {
+              const pid = (m as any).parent_id;
+              if (pid && down.has(pid)) {
                 if (!down.has(m.id)) { down.add(m.id); changed = true; }
               }
             });
@@ -150,7 +161,8 @@ const ExportPreviewPage: React.FC = () => {
           while (changed) {
             changed = false;
             allMembers.forEach((m) => {
-              if ((m.father_id && reachable.has(m.father_id)) || (m.mother_id && reachable.has(m.mother_id))) {
+              const pid = (m as any).parent_id;
+              if (pid && reachable.has(pid)) {
                 if (!reachable.has(m.id)) { reachable.add(m.id); changed = true; }
               }
             });

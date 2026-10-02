@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toLunarBirth, formatBirthFull, BIRTH_TIME_OPTIONS } from '@/utils/lunar';
 import { Network } from '@/network';
-import { getAuthUser, memberDetailVisible, isAdmin } from '@/utils/permission';
+import { getAuthUser, memberDetailVisible, canManageMember, isAdmin } from '@/utils/permission';
 
 interface Spouse {
   id?: string;
@@ -65,9 +65,12 @@ interface GenerationOption {
 export default function Members() {
   const [members, setMembers] = useState<Member[]>([]);
   const [filteredMembers, setFilteredMembers] = useState<Member[]>([]);
-  // 权限：无成员详情展示权限时仅显示姓名；认证宗亲不可编辑成员（需管理人员处理）
-  const detailVisible = memberDetailVisible(getAuthUser());
-  const canManage = isAdmin(getAuthUser());
+  // 权限：未认证仅显示姓名；“添加成员”仅管理人员；编辑本人及直系2代由 canManageMember 判定
+  const authUser = getAuthUser();
+  const detailVisible = memberDetailVisible(authUser);
+  const canManage = isAdmin(authUser);
+  const kinList = members.map((m) => ({ id: m.id, parent_id: m.parent_id }));
+  const canEditMember = (m: Member) => canManageMember(authUser, { id: m.id, parent_id: m.parent_id }, kinList);
   const [generationOptions, setGenerationOptions] = useState<GenerationOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchText, setSearchText] = useState('');
@@ -735,14 +738,16 @@ export default function Members() {
                         )}
                       </View>
                     </View>
-                    {canManage && (
+                    {canEditMember(member) && (
                     <View className="flex gap-2">
                       <View onClick={() => handleEdit(member)} className="p-2 rounded-lg" style={{ backgroundColor: '#FFF5F0' }}>
                         <Pencil size={16} color="#8B2500" />
                       </View>
+                      {canManage && (
                       <View onClick={() => handleDelete(member.id)} className="p-2 rounded-lg" style={{ backgroundColor: '#FFEBEE' }}>
                         <Trash2 size={16} color="#C62828" />
                       </View>
+                      )}
                     </View>
                     )}
                   </View>

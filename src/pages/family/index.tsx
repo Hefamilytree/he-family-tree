@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Network } from '@/network';
 import { toLunarBirth } from '@/utils/lunar';
-import { getAuthUser, memberDetailVisible, isAdmin } from '@/utils/permission';
+import { getAuthUser, memberDetailVisible, canManageMember, type KinMember } from '@/utils/permission';
 import './index.css';
 
 interface FamilyInfo {
@@ -48,10 +48,22 @@ export default function FamilyTree() {
   // 未认证仅显示成员及配偶姓名（隐藏字辈/出生/简介/葬地等敏感信息）
   const detailVisible = memberDetailVisible(getAuthUser());
   const authUser = getAuthUser();
-  const canEdit = isAdmin(authUser);
   const [loading, setLoading] = useState(true);
   const [zoom, setZoom] = useState(1);
   const [translate, setTranslate] = useState({ x: 0, y: 0 });
+
+  // 根据树结构构造血缘映射（每个节点的 parent_id），用于 canManageMember 的2代判定
+  const buildKinMap = (nodes: TreeNode[], parentId: string | null, acc: KinMember[]): KinMember[] => {
+    nodes.forEach((n) => {
+      acc.push({ id: n.id, parent_id: parentId });
+      buildKinMap(n.children, n.id, acc);
+    });
+    return acc;
+  };
+  const [allKin, setAllKin] = useState<KinMember[]>([]);
+  const canEditNode = (node: TreeNode) => canManageMember(authUser, { id: node.id }, allKin);
+  // “添加成员”入口：仅管理人员（在树中新增属于全族结构编辑）
+  const canEdit = !!authUser && ['super', 'admin'].includes((authUser.role || '').toLowerCase());
   const touchRef = useRef({
     mode: '' as '' | 'pan' | 'pinch',
     startX: 0,
@@ -121,7 +133,9 @@ export default function FamilyTree() {
       console.log('宗亲树数据:', familyRes.data, treeRes.data);
       const familyPayload = familyRes.data?.data;
       setFamily(Array.isArray(familyPayload) ? (familyPayload.length > 0 ? familyPayload[0] : null) : (familyPayload || null));
-      setRoots(treeRes.data?.data || []);
+      const treeList = treeRes.data?.data || [];
+      setRoots(treeList);
+      setAllKin(buildKinMap(treeList, null, []));
     } catch (e) {
       console.error('加载数据失败:', e);
     } finally {
@@ -160,10 +174,10 @@ export default function FamilyTree() {
     return (
       <View className="tree-node" key={node.id}>
         <View className="tree-node-content">
-          {/* 成员本人卡片（仅管理人员可点击编辑） */}
+          {/* 成员本人卡片（本人及直系2代 / 管理人员可点击编辑） */}
           <View
             className="tree-person-card"
-            onClick={() => { if (canEdit) handleEditMember(node); }}
+            onClick={() => { if (canEditNode(node)) handleEditMember(node); }}
             style={{
               backgroundColor: node.gender === 'male' ? '#E3F2FD' : '#FCE4EC',
               border: `1px solid ${node.gender === 'male' ? '#90CAF9' : '#F48FB1'}`,
@@ -197,9 +211,11 @@ export default function FamilyTree() {
                     {node.bio}
                   </Text>
                 ) : null}
+                {canEditNode(node) && (
                 <Text className="block text-xs text-center mt-1" style={{ color: '#B0A090' }}>
                   点击编辑
                 </Text>
+                )}
               </>
             )}
           </View>

@@ -67,6 +67,19 @@ export class PdfService {
     all: RawMember[],
     opts: { mode: string; branchId: string; toAncestor: boolean; startGen?: number; endGen?: number }
   ): RawMember[] {
+    // 父辈所有亲兄弟：基准宗亲之父 + 其父全部子女（本人及亲兄弟）
+    if (opts.mode === 'siblings' && opts.branchId) {
+      const base = all.find((m) => m.id === opts.branchId);
+      if (base) {
+        const anchorId = base.parent_id || base.id;
+        const ids = new Set<string>(
+          all.filter((m) => m.parent_id === anchorId).map((m) => m.id),
+        );
+        ids.add(anchorId);
+        return all.filter((m) => ids.has(m.id));
+      }
+      return [];
+    }
     if (opts.mode !== 'branch' || !opts.branchId) return all;
     const root = all.find((m) => m.id === opts.branchId);
     const picked: RawMember[] = [];

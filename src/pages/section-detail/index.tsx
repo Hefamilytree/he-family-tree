@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Pencil, Trash2, Calendar, MapPin, Phone, PhoneCall } from 'lucide-react-taro';
 import { Network } from '@/network';
-import { getAuthUser, canEditBlock, canOperateItem, type BlockKey, type AuthUser } from '@/utils/permission';
+import { getAuthUser, canEditUnit, canOperateItem, type AuthUser } from '@/utils/permission';
 
 interface ContentItem {
   id: string;
@@ -48,13 +48,8 @@ export default function SectionDetail() {
   const [loading, setLoading] = useState(true);
   const authUser: AuthUser | null = getAuthUser();
 
-  // 分类映射到权限块：供需/产品对外开放查看，但编辑仍按角色
-  const permBlock: BlockKey =
-    category === 'supply_demand' ? 'supply'
-    : category === 'product' ? 'product'
-    : category === 'entrepreneur' ? 'economic'
-    : (section as BlockKey) || 'other';
-  const canAdd = canEditBlock(authUser, permBlock);
+  // 单元（category）级权限
+  const canAdd = canEditUnit(authUser, category);
   const canEditItem = (ownerId?: string | null) =>
     canAdd && canOperateItem(authUser, ownerId);
 

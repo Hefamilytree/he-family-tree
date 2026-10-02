@@ -1266,7 +1266,7 @@ const ProfilePage = () => {
             </DialogTitle>
             <DialogDescription>
               <Text className="block">
-                管理您的绑定手机号与微信登录账号。登录仅需微信标识，手机号为登录后的可选绑定。
+                管理您的联系手机号与账号信息。
               </Text>
             </DialogDescription>
           </DialogHeader>
