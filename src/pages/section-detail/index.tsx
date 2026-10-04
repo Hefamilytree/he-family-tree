@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { View, Text } from '@tarojs/components';
-import Taro, { useRouter } from '@tarojs/taro';
+import Taro, { useRouter, useDidShow } from '@tarojs/taro';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -71,7 +71,8 @@ export default function SectionDetail() {
     }
   };
 
-  useEffect(() => { loadData(); }, [category]);
+  // 保存/删除返回本页或从首页进入时都重新拉取，确保新增内容立即显示
+  useDidShow(() => { loadData(); });
 
   const handleAdd = () => {
     Taro.navigateTo({

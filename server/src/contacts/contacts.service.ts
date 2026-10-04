@@ -37,7 +37,11 @@ export interface ContactItem {
   generation: number | null;
   generationTitle: string;
   bio: string;
-  source: 'verified' | 'manual';
+  source: 'verified' | 'manual' | 'economic';
+  /** 来源板块（经济类联系人）：entrepreneur / supply_demand / product */
+  sourceCategory?: string;
+  /** 经济类条目标题（企业/供需/产品名称） */
+  owner?: string;
 }
 
 @Injectable()
@@ -133,26 +137,59 @@ export class ContactsService {
     return (data || []).map((r) => this.normalizeManual(r as ManualRow));
   }
 
-  /** 通讯录：已认证宗亲 + 手动联系人，按世数排序 */
+  /** 经济板块联系人：企业家圈 / 供需信息 / 产品展示 中的联系方式 */
+  private async economicContacts(): Promise<ContactItem[]> {
+    const { data, error } = await this.supabase
+      .from('economic_development')
+      .select('id, title, category, contact_name, contact_phone, address')
+      .in('category', ['entrepreneur', 'supply_demand', 'product'])
+      .order('sort_order', { ascending: true });
+    if (error) {
+      console.error('查询经济板块联系人失败:', error.message);
+      return [];
+    }
+    return (data || []).map((r) => ({
+      id: r.id,
+      name: (r.contact_name as string) ? r.contact_name : ((r.title as string) || '联系人'),
+      parentName: '',
+      phone: (r.contact_phone as string) || '',
+      residence: (r.address as string) || '',
+      generation: null,
+      generationTitle: '',
+      bio: '',
+      source: 'economic' as const,
+      sourceCategory: r.category,
+      owner: r.title || '',
+    }));
+  }
+
+  /** 通讯录：已认证宗亲 + 手动联系人 + 经济板块联系人，按世数排序 */
   async directory() {
-    const [verified, manual] = await Promise.all([this.verifiedContacts(), this.manualContacts()]);
-    const list = [...verified, ...manual].sort(
+    const [verified, manual, economic] = await Promise.all([
+      this.verifiedContacts(),
+      this.manualContacts(),
+      this.economicContacts(),
+    ]);
+    const list = [...verified, ...manual, ...economic].sort(
       (a, b) => (a.generation ?? 999) - (b.generation ?? 999),
     );
     return { code: 200, msg: 'success', data: { list } };
   }
 
-  /** 附近宗亲：按居住地聚合（自动认证 + 手动），可按地区关键字过滤 */
+  /** 附近宗亲：按居住地聚合（自动认证 + 手动 + 经济），可按地区关键字过滤 */
   async nearby(keyword?: string) {
-    const [verified, manual] = await Promise.all([this.verifiedContacts(), this.manualContacts()]);
+    const [verified, manual, economic] = await Promise.all([
+      this.verifiedContacts(),
+      this.manualContacts(),
+      this.economicContacts(),
+    ]);
     const kw = (keyword || '').trim();
-    const list = [...verified, ...manual]
-      .filter((c) => c.residence)
-      .filter((c) => (kw ? c.residence.includes(kw) : true));
+    const base = [...verified, ...manual, ...economic]
+      .filter((c) => (kw ? (c.residence || '').includes(kw) : true));
 
     const areaMap = new Map<string, { area: string; count: number; members: ContactItem[] }>();
-    list.forEach((c) => {
-      // 居住地取到市/区级前缀做聚合
+    base.forEach((c) => {
+      if (!c.residence) return;
       const area = (c.residence.split(/[·•,，\s\-]/)[0] || c.residence).trim();
       if (!areaMap.has(area)) areaMap.set(area, { area, count: 0, members: [] });
       const g = areaMap.get(area)!;
@@ -160,8 +197,10 @@ export class ContactsService {
       g.members.push(c);
     });
     const areas = Array.from(areaMap.values()).sort((a, b) => b.count - a.count);
-    const flatList = areas.flatMap((a) => a.members);
-    return { code: 200, msg: 'success', data: { areas, list: flatList, total: list.length } };
+    // 无居住地的（如部分经济联系人）追加到列表尾部
+    const noResidence = base.filter((c) => !c.residence);
+    const flatList = areas.flatMap((a) => a.members).concat(noResidence);
+    return { code: 200, msg: 'success', data: { areas, list: flatList, total: base.length } };
   }
 
   /** 新建手动联系人 */

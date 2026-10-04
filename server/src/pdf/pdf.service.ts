@@ -67,18 +67,30 @@ export class PdfService {
     all: RawMember[],
     opts: { mode: string; branchId: string; toAncestor: boolean; startGen?: number; endGen?: number }
   ): RawMember[] {
-    // 父辈所有亲兄弟：基准宗亲之父 + 其父全部子女（本人及亲兄弟）
+    // 父辈亲兄弟：从「父亲辈」起逐代向上收集每一代同辈亲兄弟（含配偶），直到始祖辈；不含本人辈及其子女
     if (opts.mode === 'siblings' && opts.branchId) {
+      const picked = new Set<string>();
       const base = all.find((m) => m.id === opts.branchId);
       if (base) {
-        const anchorId = base.parent_id || base.id;
-        const ids = new Set<string>(
-          all.filter((m) => m.parent_id === anchorId).map((m) => m.id),
-        );
-        ids.add(anchorId);
-        return all.filter((m) => ids.has(m.id));
+        // 从父亲辈开始向上
+        const first = base.parent_id
+          ? all.find((m) => m.id === base.parent_id)
+          : base;
+        let p: RawMember | undefined = first || base;
+        const seen = new Set<string>();
+        let guard = 0;
+        while (p && !seen.has(p.id) && guard++ < 500) {
+          seen.add(p.id);
+          const pid = (p.parent_id ?? null) as string | null;
+          // 该代亲兄弟 = 与 p 同父的所有成员（含 p 自身）
+          all
+            .filter((m) => (m.hasOwnProperty('parent_id') ? m.parent_id : null) === pid)
+            .forEach((m) => picked.add(m.id));
+          if (!pid) break; // 已到始祖辈（根）
+          p = all.find((x) => x.id === pid);
+        }
       }
-      return [];
+      return all.filter((m) => picked.has(m.id));
     }
     if (opts.mode !== 'branch' || !opts.branchId) return all;
     const root = all.find((m) => m.id === opts.branchId);

@@ -121,16 +121,30 @@ const ExportPreviewPage: React.FC = () => {
 
       let filtered = [...allMembers];
       if (exportMode === 'siblings' && branchId) {
-        // 父辈所有亲兄弟：取基准宗亲之父 + 其父全部子女（本人及亲兄弟）
+        // 父辈亲兄弟：从「父亲辈」起逐代向上收集每一代同辈亲兄弟，直到始祖辈；不含本人辈及子女
+        const picked = new Set<string>();
         const base = allMembers.find((m) => m.id === branchId);
         if (base) {
-          const anchorId = (base as any).parent_id || base.id;
-          const siblings = allMembers.filter((m) => (m as any).parent_id === anchorId);
-          const father = allMembers.find((m) => m.id === anchorId);
-          const set = new Set<string>(siblings.map((m) => m.id));
-          if (father) set.add(father.id);
-          filtered = allMembers.filter((m) => set.has(m.id));
+          const first = (base as any).parent_id
+            ? allMembers.find((m) => m.id === (base as any).parent_id)
+            : base;
+          let p: Member | undefined = first || base;
+          const seen = new Set<string>();
+          let guard = 0;
+          while (p && !seen.has(p.id) && guard++ < 500) {
+            seen.add(p.id);
+            const pid = (p as any).parent_id || null;
+            allMembers
+              .filter((m) => ((m as any).parent_id || null) === pid)
+              .forEach((m) => picked.add(m.id));
+            if (!pid) break;
+            p = allMembers.find((m) => m.id === pid);
+          }
         }
+        filtered = allMembers.filter((m) => picked.has(m.id));
+        // 与分支族谱一致的世数范围（绝对世数过滤）
+        if (startGen !== undefined) filtered = filtered.filter((m) => (m.generation ?? 1) >= startGen);
+        if (endGen !== undefined) filtered = filtered.filter((m) => (m.generation ?? 1) <= endGen);
       } else if (exportMode === 'branch' && branchId) {
         if (includeAncestor) {
           const ancestorIds = new Set<string>();

@@ -22,7 +22,9 @@ interface KinItem {
   phone?: string;
   residence?: string;
   bio?: string;
-  source?: 'verified' | 'manual';
+  source?: 'verified' | 'manual' | 'economic';
+  sourceCategory?: string;
+  owner?: string;
 }
 
 interface ContactForm {
@@ -181,6 +183,10 @@ const ContactsPage: React.FC = () => {
 
   const renderCard = (k: KinItem) => {
     const isManual = k.source === 'manual';
+    const isEconomic = k.source === 'economic';
+    const ecoLabel: Record<string, string> = {
+      entrepreneur: '企业家圈', supply_demand: '供需信息', product: '产品展示',
+    };
     return (
       <Card key={`${k.source}-${k.id}`} className="overflow-hidden">
         <CardContent className="p-4">
@@ -188,6 +194,9 @@ const ContactsPage: React.FC = () => {
             <View className="flex-1">
               <View className="flex items-center gap-2 flex-wrap">
                 <Text className="block text-base font-bold text-stone-800">{k.name}</Text>
+                {isEconomic && k.owner ? (
+                  <Text className="block text-xs text-stone-500">{k.owner}</Text>
+                ) : null}
                 {k.generationTitle ? (
                   <View className="px-2 py-1 rounded bg-red-800 bg-opacity-10">
                     <Text className="text-xs text-red-800">{k.generationTitle}字辈</Text>
@@ -199,7 +208,11 @@ const ContactsPage: React.FC = () => {
                 {!k.parentName ? null : (
                   <Text className="block text-xs text-stone-500">父：{k.parentName}</Text>
                 )}
-                {isManual ? (
+                {isEconomic ? (
+                  <View className="px-2 py-1 rounded bg-blue-50">
+                    <Text className="text-xs text-blue-800">{ecoLabel[k.sourceCategory || ''] || '来源'}</Text>
+                  </View>
+                ) : isManual ? (
                   <View className="px-2 py-1 rounded bg-stone-200">
                     <Text className="text-xs text-stone-500">手动</Text>
                   </View>
