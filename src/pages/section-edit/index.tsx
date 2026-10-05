@@ -58,6 +58,12 @@ export default function SectionEdit() {
   const isEconomic = section === 'economic';
   const econConfig = ECONOMIC_FIELD_CONFIG[category] || { titleLabel: '标题', contentLabel: '内容', showContent: true, showNote: false, showImage: false };
 
+  // 统一携带登录凭证（后端写操作强制校验 token）
+  const authHeader = () => {
+    const token = Taro.getStorageSync('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   // 经济板块：标题承载主标识（字辈/单位名称），内容承载副标识（现住址/经营范围）
   const showTitleLabel = isEconomic ? econConfig.titleLabel : '标题';
   const showContentLabel = isEconomic ? econConfig.contentLabel : '内容';
@@ -126,7 +132,7 @@ export default function SectionEdit() {
     }
     setSaving(true);
     try {
-      const familyRes = await Network.request({ url: '/api/family' });
+      const familyRes = await Network.request({ url: '/api/family', header: authHeader() });
       const familyPayload = familyRes.data?.data;
       const familyId = Array.isArray(familyPayload) ? familyPayload[0]?.id : familyPayload?.id;
       if (!familyId) {
@@ -156,10 +162,10 @@ export default function SectionEdit() {
       }
 
       if (editId) {
-        await Network.request({ url: `${apiUrl}/${editId}`, method: 'PUT', data });
+        await Network.request({ url: `${apiUrl}/${editId}`, method: 'PUT', data, header: authHeader() });
         Taro.showToast({ title: '更新成功', icon: 'success' });
       } else {
-        await Network.request({ url: apiUrl, method: 'POST', data });
+        await Network.request({ url: apiUrl, method: 'POST', data, header: authHeader() });
         Taro.showToast({ title: '添加成功', icon: 'success' });
       }
       setTimeout(() => Taro.navigateBack(), 1000);

@@ -54,6 +54,10 @@ export default function SectionDetail() {
     canAdd && canOperateItem(authUser, ownerId);
 
   const apiUrl = SECTION_API_MAP[section] || '';
+  const authHeader = () => {
+    const token = Taro.getStorageSync('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
   const isEconomic = section === 'economic';
   const econConfig = ECONOMIC_FIELD_CONFIG[category] || { titleLabel: '标题', contentLabel: '内容', showContent: true, showNote: false, showContact: false };
 
@@ -90,7 +94,7 @@ export default function SectionDetail() {
     const result = await Taro.showModal({ title: '确认删除', content: '确定要删除这条记录吗？' });
     if (!result.confirm) return;
     try {
-      await Network.request({ url: `${apiUrl}/${id}`, method: 'DELETE' });
+      await Network.request({ url: `${apiUrl}/${id}`, method: 'DELETE', header: authHeader() });
       Taro.showToast({ title: '删除成功', icon: 'success' });
       loadData();
     } catch (e) {

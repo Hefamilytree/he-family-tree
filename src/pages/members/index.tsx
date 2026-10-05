@@ -71,6 +71,11 @@ export default function Members() {
   const canManage = isAdmin(authUser);
   const kinList = members.map((m) => ({ id: m.id, parent_id: m.parent_id }));
   const canEditMember = (m: Member) => canManageMember(authUser, { id: m.id, parent_id: m.parent_id }, kinList);
+  // 统一携带登录凭证（后端写操作强制校验 token）
+  const authHeader = () => {
+    const token = Taro.getStorageSync('token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
   const [generationOptions, setGenerationOptions] = useState<GenerationOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchText, setSearchText] = useState('');
@@ -257,7 +262,7 @@ export default function Members() {
     const validSpouses = formSpouses.filter(s => s.name.trim());
 
     try {
-      const familyRes = await Network.request({ url: '/api/family' });
+      const familyRes = await Network.request({ url: '/api/family', header: authHeader() });
       const familyPayload = familyRes.data?.data;
       const familyId = Array.isArray(familyPayload) ? familyPayload[0]?.id : familyPayload?.id;
       if (!familyId) {
@@ -285,12 +290,12 @@ export default function Members() {
 
       let savedId = '';
       if (editingMember) {
-        const updateRes = await Network.request({ url: `/api/members/${editingMember.id}`, method: 'PUT', data });
+        const updateRes = await Network.request({ url: `/api/members/${editingMember.id}`, method: 'PUT', data, header: authHeader() });
         console.log('更新成员响应:', updateRes.data);
         savedId = editingMember.id;
         Taro.showToast({ title: '更新成功', icon: 'success' });
       } else {
-        const createRes = await Network.request({ url: '/api/members', method: 'POST', data });
+        const createRes = await Network.request({ url: '/api/members', method: 'POST', data, header: authHeader() });
         console.log('新增成员响应:', createRes.data);
         savedId = createRes.data?.data?.id || '';
         Taro.showToast({ title: '添加成功', icon: 'success' });
@@ -302,13 +307,14 @@ export default function Members() {
         const existing = editingMember?.spouses || [];
         for (const s of existing) {
           if (s.id) {
-            await Network.request({ url: `/api/spouses?id=${s.id}`, method: 'DELETE' }).catch(() => null);
+            await Network.request({ url: `/api/spouses?id=${s.id}`, method: 'DELETE', header: authHeader() }).catch(() => null);
           }
         }
         for (const s of validSpouses) {
           await Network.request({
             url: '/api/spouses',
             method: 'POST',
+            header: authHeader(),
             data: {
               memberId: savedId,
               name: s.name.trim(),
@@ -336,7 +342,7 @@ export default function Members() {
     const result = await Taro.showModal({ title: '确认删除', content: '确定要删除这位成员吗？' });
     if (!result.confirm) return;
     try {
-      await Network.request({ url: `/api/members/${id}`, method: 'DELETE' });
+      await Network.request({ url: `/api/members/${id}`, method: 'DELETE', header: authHeader() });
       Taro.showToast({ title: '删除成功', icon: 'success' });
       loadData();
     } catch (e) {
