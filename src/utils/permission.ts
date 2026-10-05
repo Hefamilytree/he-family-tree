@@ -124,11 +124,54 @@ export function canManageMember(
 }
 
 /** 读取当前登录用户（未登录返回 null） */
+/** base64 解码（兼容小程序无全局 atob 的环境） */
+function base64Decode(input: string): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+  const str = input.replace(/=+$/, '')
+  let output = ''
+  let i = 0
+  while (i < str.length) {
+    const e1 = chars.indexOf(str.charAt(i++))
+    const e2 = chars.indexOf(str.charAt(i++))
+    const e3 = chars.indexOf(str.charAt(i++))
+    const e4 = chars.indexOf(str.charAt(i++))
+    const c1 = (e1 << 2) | (e2 >> 4)
+    const c2 = ((e2 & 15) << 4) | (e3 >> 2)
+    const c3 = ((e3 & 3) << 6) | e4
+    output += String.fromCharCode(c1)
+    if (e3 !== 64) output += String.fromCharCode(c2)
+    if (e4 !== 64) output += String.fromCharCode(c3)
+  }
+  return output
+}
+
+/** 解析 JWT payload（不校验签名，仅用于前端展示角色实时校正） */
+function decodeJwtPayload(token: string): { userId?: string; username?: string; role?: string } | null {
+  try {
+    const part = token.split('.')[1]
+    if (!part) return null
+    const json = decodeURIComponent(
+      base64Decode(part).split('').map((c) => `%${c.charCodeAt(0).toString(16).padStart(2, '0')}`).join('')
+    )
+    return JSON.parse(json)
+  } catch {
+    return null
+  }
+}
+
 export function getAuthUser(): AuthUser | null {
   const token = Taro.getStorageSync('token')
   if (!token) return null
-  const u = Taro.getStorageSync('userInfo')
-  return u && u.role ? (u as AuthUser) : null
+  const u = (Taro.getStorageSync('userInfo') || {}) as AuthUser
+  const payload = decodeJwtPayload(token)
+  // 以 token 中的实时角色为准，校正可能陈旧的本地缓存
+  const merged: AuthUser = {
+    ...u,
+    id: u.id || payload?.userId || '',
+    username: u.username || payload?.username || '',
+    role: payload?.role || u.role,
+  }
+  return merged.role ? merged : null
 }
 
 export function logout(): void {

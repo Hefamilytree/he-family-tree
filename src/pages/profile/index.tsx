@@ -482,6 +482,13 @@ const ProfilePage = () => {
       });
       console.log('创建家族响应:', res.data);
       if (res.data.code === 200) {
+        // 创建者已被后端提升为唯一主管理员，同步更新本地缓存角色，避免页面仍按旧角色隐藏编辑入口
+        const cached = Taro.getStorageSync('userInfo');
+        if (cached) {
+          const next = { ...cached, role: 'super' };
+          Taro.setStorageSync('userInfo', next);
+          setUserInfo(next);
+        }
         Taro.showToast({ title: '家族创建成功', icon: 'success' });
         setShowFamilyDialog(false);
         setFamilyExists(true);

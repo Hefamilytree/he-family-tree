@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { View, Text, ScrollView } from '@tarojs/components'
+import Taro from '@tarojs/taro'
 import { Network } from '@/network'
 import { Card, CardContent } from '@/components/ui/card'
 import { Cake, Heart } from 'lucide-react-taro'
@@ -35,7 +36,12 @@ export default function Birthdays() {
     const load = async () => {
       try {
         setLoading(true)
-        const res = await Network.request({ url: '/api/birthdays/mine' })
+        // 登录后自动关联当前已登录账号（携带本地登录凭证，无需重复操作）
+        const token = Taro.getStorageSync('token')
+        const res = await Network.request({
+          url: '/api/birthdays/mine',
+          header: token ? { Authorization: `Bearer ${token}` } : {}
+        })
         console.log('birthdays mine res.data:', JSON.stringify(res.data))
         const body = (res.data as any) || {}
         if (body.code !== 200) {
