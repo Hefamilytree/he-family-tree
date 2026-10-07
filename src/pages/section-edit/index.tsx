@@ -179,13 +179,19 @@ export default function SectionEdit() {
         }
       }
 
-      if (editId) {
-        await Network.request({ url: `${apiUrl}/${editId}`, method: 'PUT', data, header: authHeader() });
-        Taro.showToast({ title: '更新成功', icon: 'success' });
-      } else {
-        await Network.request({ url: apiUrl, method: 'POST', data, header: authHeader() });
-        Taro.showToast({ title: '添加成功', icon: 'success' });
+      const req: any = editId
+        ? await Network.request({ url: `${apiUrl}/${editId}`, method: 'PUT', data, header: authHeader() })
+        : await Network.request({ url: apiUrl, method: 'POST', data, header: authHeader() });
+      console.log('[section-edit] 保存响应:', req.statusCode, req.data);
+      // 关键：必须校验后端真实结果，Network/Taro 不会对 401/403/500 抛异常，
+      // 若忽略 statusCode 会把"保存失败"误判为"保存成功"并跳回，导致内容丢失。
+      if (req.statusCode !== 200 || !req.data || (req.data.code && req.data.code !== 200)) {
+        const msg = req.data?.message || req.data?.msg || '保存失败，请稍后再试';
+        Taro.showToast({ title: msg, icon: 'none', duration: 2500 });
+        console.error('[section-edit] 保存未成功:', req.statusCode, req.data);
+        return;
       }
+      Taro.showToast({ title: editId ? '更新成功' : '添加成功', icon: 'success' });
       setTimeout(() => Taro.navigateBack(), 1000);
     } catch (e) {
       console.error('保存失败:', e);
