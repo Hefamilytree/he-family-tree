@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Network } from '@/network';
 import { ImagePlus } from 'lucide-react-taro';
+import { getAuthUser } from '@/utils/permission';
 
 const SECTION_API_MAP: Record<string, string> = {
   cultural: '/api/cultural',
@@ -122,6 +123,23 @@ export default function SectionEdit() {
   const handleSave = async () => {
     const isCultural = section === 'cultural';
     const showOnlyContent = isCultural;
+
+    // 权限校验：统一实时解析 JWT token 中的角色，绝不读取本地缓存 role 做判断
+    const tokenUser = getAuthUser();
+    const cachedRole = (Taro.getStorageSync('userInfo') || {}).role;
+    const tokenRole = tokenUser?.role;
+    console.log('[section-edit] 点击保存 -> token角色:', tokenRole, '| 本地缓存role:', cachedRole);
+    if (!tokenUser || !tokenRole) {
+      Taro.showToast({ title: '请先登录', icon: 'none' });
+      return;
+    }
+    const needLevel = isCultural ? 3 : section === 'harmony' ? 2 : 2;
+    const ROLE_LEVEL: Record<string, number> = { guest: 0, member: 1, verified: 2, admin: 3, super: 4 };
+    if ((ROLE_LEVEL[tokenRole] ?? 0) < needLevel) {
+      Taro.showToast({ title: '无编辑权限', icon: 'none' });
+      return;
+    }
+
     if (!showOnlyContent && !formTitle.trim()) {
       Taro.showToast({ title: '请输入标题', icon: 'none' });
       return;
