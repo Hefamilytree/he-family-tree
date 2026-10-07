@@ -126,8 +126,10 @@ export function canManageMember(
 /** 读取当前登录用户（未登录返回 null） */
 /** base64 解码（兼容小程序无全局 atob 的环境） */
 function base64Decode(input: string): string {
+  // JWT 使用 base64url（- 替代 +，_ 替代 /），先转回标准 base64
+  const normalized = input.replace(/-/g, '+').replace(/_/g, '/')
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
-  const str = input.replace(/=+$/, '')
+  const str = normalized.replace(/=+$/, '')
   let output = ''
   let i = 0
   while (i < str.length) {
