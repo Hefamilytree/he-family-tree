@@ -1,74 +1,70 @@
+/**
+ * code2Session：通过小程序登录凭证 code，换取微信真实 openid。
+ *
+ * 安全约束（需求3）：
+ *  - 用户唯一标识必须来自微信接口返回的真实 openid，严禁本地/模拟 openid。
+ *  - 调用失败时返回明确错误（errcode/errmsg），由上层给出友好提示，绝不自动降级。
+ */
 import * as https from 'https';
 
-/**
- * 微信开放能力：通过 AppID / AppSecret 交换 openid 与手机号。
- * 凭证来自环境变量 WX_APPID / WX_SECRET（在小程序后台与项目绑定后配置）。
- */
+interface WxLoginResponse {
+  openid?: string;
+  unionid?: string;
+  session_key?: string;
+  errcode?: number;
+  errmsg?: string;
+}
 
-function getJson(url: string): Promise<any> {
-  return new Promise((resolve, reject) => {
+/**
+ * 调用微信 code2Session。
+ * 成功：返回 { openid, unionid?, session_key }。
+ * 失败：返回 { errcode, errmsg }（不抛假数据）。
+ */
+export function code2Session(jsCode: string): Promise<WxLoginResponse> {
+  const WX_APPID = process.env.WX_APPID || process.env.WECHAT_APPID || '';
+  const WX_SECRET = process.env.WX_SECRET || process.env.WECHAT_SECRET || '';
+
+  if (!jsCode) {
+    return Promise.resolve({ errcode: -100, errmsg: '缺少登录凭证 code' });
+  }
+  if (!WX_APPID || !WX_SECRET) {
+    // 后端未配置微信凭证：明确报错，禁止伪造 openid
+    return Promise.resolve({
+      errcode: -101,
+      errmsg: '服务端未配置微信 AppID/AppSecret，请先在开放平台完成绑定',
+    });
+  }
+
+  const url =
+    `https://api.weixin.qq.com/sns/jscode2session` +
+    `?appid=${encodeURIComponent(WX_APPID)}` +
+    `&secret=${encodeURIComponent(WX_SECRET)}` +
+    `&js_code=${encodeURIComponent(jsCode)}` +
+    `&grant_type=authorization_code`;
+
+  return new Promise((resolve) => {
     https
-      .get(url, (res) => {
-        let body = '';
-        res.on('data', (c) => (body += c));
-        res.on('end', () => {
+      .get(url, (resp) => {
+        let raw = '';
+        resp.on('data', (chunk) => (raw += chunk));
+        resp.on('end', () => {
           try {
-            resolve(JSON.parse(body));
+            const parsed = JSON.parse(raw) as WxLoginResponse;
+            if (!parsed.openid) {
+              resolve({
+                errcode: parsed.errcode ?? -102,
+                errmsg: parsed.errmsg || '获取微信标识失败，请稍后重试',
+              });
+            } else {
+              resolve(parsed);
+            }
           } catch (e) {
-            reject(e);
+            resolve({ errcode: -103, errmsg: '微信服务返回解析失败' });
           }
         });
       })
-      .on('error', reject);
-  });
-}
-
-export async function code2Session(loginCode: string): Promise<{ openid?: string; errcode?: number; errmsg?: string }> {
-  const appid = process.env.WX_APPID;
-  const secret = process.env.WX_SECRET;
-  if (!appid || !secret) {
-    return { errcode: -1, errmsg: '未配置 WX_APPID/WX_SECRET' };
-  }
-  const url = `https://api.weixin.qq.com/sns/jscode2session?appid=${appid}&secret=${secret}&js_code=${encodeURIComponent(
-    loginCode
-  )}&grant_type=authorization_code`;
-  return getJson(url);
-}
-
-export async function getPhoneNumber(phoneCode: string): Promise<{ phoneNumber?: string; errcode?: number; errmsg?: string }> {
-  const appid = process.env.WX_APPID;
-  const secret = process.env.WX_SECRET;
-  if (!appid || !secret) {
-    return { errcode: -1, errmsg: '未配置 WX_APPID/WX_SECRET' };
-  }
-  // 1. 取 access_token
-  const tokenUrl = `https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${appid}&secret=${secret}`;
-  const tokenRes = await getJson(tokenUrl);
-  if (!tokenRes.access_token) return tokenRes;
-  // 2. 换手机号
-  return new Promise((resolve, reject) => {
-    const req = https.request(
-      {
-        method: 'POST',
-        host: 'api.weixin.qq.com',
-        path: `/wxa/business/getuserphonenumber?access_token=${tokenRes.access_token}`,
-        headers: { 'Content-Type': 'application/json' },
-      },
-      (res) => {
-        let body = '';
-        res.on('data', (c) => (body += c));
-        res.on('end', () => {
-          try {
-            const j = JSON.parse(body);
-            resolve(j.phone_info ? { phoneNumber: j.phone_info.phoneNumber } : j);
-          } catch (e) {
-            reject(e);
-          }
-        });
-      }
-    );
-    req.on('error', reject);
-    req.write(JSON.stringify({ code: phoneCode }));
-    req.end();
+      .on('error', (err) => {
+        resolve({ errcode: -104, errmsg: `无法连接微信服务：${err.message}` });
+      });
   });
 }

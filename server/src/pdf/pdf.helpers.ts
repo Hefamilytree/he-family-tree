@@ -95,6 +95,33 @@ export function drawVertical(
   return { x, y, finished: true };
 }
 
+/**
+ * 将竖排文本按「每列可容纳字数」切分，返回行（列）数组。
+ * 尊重原文换行符；超出单列容量时自动续到下一列。
+ */
+export function splitByColumnCapacity(text: string, charsPerColumn: number): string[] {
+  const cap = Math.max(1, Math.floor(charsPerColumn));
+  const out: string[] = [];
+  const segments = String(text || '').split('\n');
+  let cur = '';
+
+  const pushCur = () => {
+    if (cur.length) out.push(cur);
+    cur = '';
+  };
+
+  segments.forEach((seg, si) => {
+    if (si > 0) pushCur(); // 原文换行：强制换列
+    const chars = Array.from(seg);
+    for (const ch of chars) {
+      if (cur.length >= cap) pushCur();
+      cur += ch;
+    }
+  });
+  pushCur();
+  return out;
+}
+
 /** 竖排绘制右侧栏文字（逐字直立、字距大，含页码与堂号）
  *  模板格式：`家族名xxx 第N页 堂号`，逐字竖排居中于侧栏中线 */
 function toChineseNumber(n: number): string {

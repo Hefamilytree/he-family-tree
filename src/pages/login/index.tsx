@@ -10,28 +10,6 @@ export default function LoginPage() {
 
   const isMiniApp = [Taro.ENV_TYPE.WEAPP, Taro.ENV_TYPE.TT].includes(Taro.getEnv() as any);
 
-  /** 判定是否为测试环境（游客 AppID 或未绑定真实 AppID），此时 openid 无法由后端换取稳定标识 */
-  const getAppId = () => {
-    try {
-      const info: any = Taro.getAccountInfoSync?.();
-      const appId = info?.miniProgram?.appId || '';
-      return appId;
-    } catch (e) {
-      return '';
-    }
-  };
-
-  /** 测试环境下使用本地持久化的固定虚拟 openid，保证同一微信多次登录账号稳定不变 */
-  const getOrCreateDevOpenid = () => {
-    const KEY = 'dev_openid_fixed';
-    let openid = Taro.getStorageSync(KEY);
-    if (!openid) {
-      openid = 'devwx_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
-      Taro.setStorageSync(KEY, openid);
-    }
-    return openid;
-  };
-
   /** 登录成功后落地登录态（缓存 token 与用户信息） */
   const applyLogin = (data: any) => {
     Taro.setStorageSync('token', data.token);
@@ -40,53 +18,52 @@ export default function LoginPage() {
     setTimeout(() => Taro.navigateBack(), 1000);
   };
 
-  /** 微信一键登录：仅 wx.login 获取 openid，不再强制手机号授权 */
+  /**
+   * 微信一键登录（需求3）：
+   *  - 仅使用 Taro.login() 拿到 code，由后端 code2Session 换取微信真实 openid。
+   *  - 同一 AppID 下，同一微信在手机/PC 打开均为同一 openid，即同一账号，数据互通。
+   *  - 任何失败都给出友好提示，绝不使用前端本地临时 openid 降级（避免多账号）。
+   */
   const onWxLogin = async () => {
+    if (wxLoading) return;
     setWxLoading(true);
     try {
-      const appId = getAppId();
-      // 需要真实微信 openid：优先用 wx.login 换取 code，由后端 code2Session 换取稳定 openid
-      // 适用于已绑定真实 AppID 且后端已配置 WX_APPID/WX_SECRET 的环境
-      const wantsRealOpenid = !!appId && appId !== 'touristappid' && appId.indexOf('wx') === 0;
-
-      // 首次使用 loginCode：成功后保持真实 openid；失败（如后端未配置微信凭证）则降级为本地固定 openid
-      if (wantsRealOpenid) {
-        try {
-          const loginRes: any = await Taro.login();
-          const code = loginRes?.code;
-          if (code) {
-            const res = await Network.request({
-              url: '/api/auth/wx-login',
-              method: 'POST',
-              data: { loginCode: code, nickname: '微信宗亲' },
-            });
-            console.log('WeChat login (real) response:', res.data);
-            if (res.data.code === 200) {
-              applyLogin(res.data.data);
-              return;
-            }
-            console.warn('loginCode 登录失败，降级为本地 openid 登录:', res.data.msg);
-          }
-        } catch (e) {
-          console.warn('wx.login/loginCode 异常，降级为本地 openid 登录:', e);
-        }
+      const loginRes: any = await Taro.login();
+      const code = loginRes?.code;
+      if (!code) {
+        Taro.showModal({
+          title: '登录提示',
+          content: '未能获取微信登录凭证，请确认已在微信中打开小程序后重试。',
+          showCancel: false,
+        });
+        return;
       }
 
-      // 测试/预览环境，或后端未配置微信凭证时的保底方案：直传本地固定 openid，账号稳定不重复新建
-      const res2 = await Network.request({
+      const res = await Network.request({
         url: '/api/auth/wx-login',
         method: 'POST',
-        data: { openid: getOrCreateDevOpenid(), nickname: '微信宗亲' },
+        data: { loginCode: code, nickname: '微信宗亲' },
       });
-      console.log('WeChat login (dev) response:', res2.data);
-      if (res2.data.code === 200) {
-        applyLogin(res2.data.data);
-      } else {
-        Taro.showToast({ title: res2.data.msg || '微信登录失败', icon: 'none' });
+      console.log('WeChat login response:', res.data);
+
+      if (res.data && res.data.code === 200 && res.data.data?.token) {
+        applyLogin(res.data.data);
+        return;
       }
+
+      // code2Session 失败 / 未配置凭证：友好提示，不自动降级
+      Taro.showModal({
+        title: '登录未成功',
+        content: res.data?.msg || '微信服务暂时不可用，请稍后重试；若多次失败，请联系家族管理员。',
+        showCancel: false,
+      });
     } catch (error) {
       console.error('WeChat login error:', error);
-      Taro.showToast({ title: '网络错误，请稍后重试', icon: 'none' });
+      Taro.showModal({
+        title: '网络异常',
+        content: '当前网络不稳定，请检查网络后重新登录。',
+        showCancel: false,
+      });
     } finally {
       setWxLoading(false);
     }
@@ -102,7 +79,7 @@ export default function LoginPage() {
         <Text className="block text-sm text-stone-500 mt-3">传承家族文化 · 记录血脉亲情</Text>
       </View>
 
-      {/* 微信一键登录：仅获取 openid，登录不再强制手机号 */}
+      {/* 微信一键登录：手机 / PC 微信均使用真实 openid，账号互通 */}
       <View className="mt-8">
         {isMiniApp ? (
           <Button
@@ -116,7 +93,13 @@ export default function LoginPage() {
         ) : (
           <Button
             className="w-full bg-emerald-600 text-white rounded-full py-4"
-            onClick={() => Taro.showToast({ title: '请在微信小程序中使用微信一键登录', icon: 'none' })}
+            onClick={() =>
+              Taro.showModal({
+                title: '请在微信中打开',
+                content: '微信一键登录需在手机微信或 PC 微信的小程序中使用，登录后数据自动互通。',
+                showCancel: false,
+              })
+            }
           >
             <MessageCircle size={20} color="#ffffff" className="mr-2" />
             <Text className="text-base">微信一键登录</Text>
@@ -126,7 +109,7 @@ export default function LoginPage() {
         <View className="mt-6 flex items-start gap-2 bg-white rounded-xl p-4">
           <ShieldCheck size={18} color="#6B5B4F" className="mt-1 flex-shrink-0" />
           <Text className="block text-xs leading-5 text-stone-500 flex-1">
-            登录即代表您已阅读并同意《隐私政策》。手机号可在登录后自愿绑定，用于族人联络与账号找回。
+            登录即代表您已阅读并同意《隐私政策》。系统使用您的微信身份作为唯一账号，手机与电脑登录数据互通；手机号可在登录后自愿绑定，用于族人联络与账号找回。
           </Text>
         </View>
       </View>

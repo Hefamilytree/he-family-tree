@@ -603,11 +603,13 @@ export class AuthService {
     if (!loginCode) return { code: 400, msg: '缺少登录凭证', data: null };
     const { code2Session } = require('./wx.api');
     const session = await code2Session(loginCode);
-    // 注意：openid 由 code2Session 稳定返回（同一微信在同一 AppID 下固定不变）。
-    // 未配置 WX_APPID 时，绝不能将一次性 loginCode 当作 openid（会导致每次登录账号都不同）。
-    // 测试/预览环境请使用前端直传的本地固定 openid 接口（wx-login body.openid），不经过本方法。
+    // 需求3：openid 必须来自 code2Session 的真实返回；失败给出友好提示，绝不使用本地/模拟 openid 降级。
     if (!session || !session.openid) {
-      return { code: 400, msg: '微信登录失败，请确认已配置小程序 AppID 与 Secret（测试环境请使用直传 openid 方式登录）', data: null };
+      return {
+        code: 400,
+        msg: session?.errmsg || '微信登录失败，请稍后重试；若持续出现，请联系家族管理员检查小程序配置',
+        data: null,
+      };
     }
     return this.loginByOpenid(session.openid, nickname, avatarUrl);
   }

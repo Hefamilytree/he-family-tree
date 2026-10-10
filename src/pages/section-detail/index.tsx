@@ -7,6 +7,18 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Pencil, Trash2, Calendar, MapPin, Phone, PhoneCall } from 'lucide-react-taro';
 import { Network } from '@/network';
 import { getAuthUser, canEditUnit, canOperateItem, type AuthUser } from '@/utils/permission';
+import ActivityInteraction from '@/components/activity-interaction';
+
+// 支持一键报名 + 评论的 7 个孝亲睦族活动单元
+const INTERACTIVE_CATEGORIES = [
+  'activity',
+  'ancestor_worship',
+  'coming_of_age',
+  'talent',
+  'elderly_care',
+  'education',
+  'relief',
+];
 
 interface ContentItem {
   id: string;
@@ -59,6 +71,8 @@ export default function SectionDetail() {
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
   const isEconomic = section === 'economic';
+  const isInteractive =
+    section === 'harmony' && INTERACTIVE_CATEGORIES.includes(category);
   const econConfig = ECONOMIC_FIELD_CONFIG[category] || { titleLabel: '标题', contentLabel: '内容', showContent: true, showNote: false, showContact: false };
 
   const loadData = async () => {
@@ -230,6 +244,9 @@ export default function SectionDetail() {
                     )}
                   </View>
                   {renderMainBody(item)}
+                  {isInteractive && (
+                    <ActivityInteraction activityId={item.id} />
+                  )}
                 </CardContent>
               </Card>
             ))}

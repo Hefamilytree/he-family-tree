@@ -4,7 +4,7 @@ import { existsSync } from 'fs';
 import * as PDFDocument from 'pdfkit';
 import { getSupabaseClient } from '../storage/database/supabase-client';
 import { bySeniority } from '@/common/seniority';
-import { toLunar, currentGanZhiYear, drawVertical, drawSidebar, toChineseNum, toSquareBrackets } from './pdf.helpers';
+import { toLunar, currentGanZhiYear, drawVertical, drawSidebar, toChineseNum, toSquareBrackets, splitByColumnCapacity } from './pdf.helpers';
 
 interface RawMember {
   id: string;
@@ -324,7 +324,7 @@ export class PdfService {
       if (text) verticalText(text, `${shiName}家史`, '家史');
     }
 
-    // ===== 5. 家风 / 家训（两栏并列；每栏“标题”置于栏右端（阅读起点）先于内容，且家训栏左侧留白收窄） =====
+    // ===== 5. 家风 / 家训（两栏并列；家训按列容量自动分列、在同一页内完整排布，避免打印跨页） =====
     {
       const familyStyle = byCat('family_style').concat(byCat('family_motto')).map((i) => i.content).filter(Boolean).join('\n');
       const familyRule = [family.motto, ...byCat('family_instruction').map((i) => i.content).filter(Boolean)]
@@ -336,31 +336,40 @@ export class PdfService {
         pageTitle('家风家训祖训');
         const colTop = M_TOP + 80;
         const colBottom = BOTTOM_Y;
-        const onNew = (sb: string) => () => {
-          pageNo += 1;
-          doc.rect(0, 0, PAGE_W, PAGE_H).fill(PAPER);
-          doc.rect(0, 0, PAGE_W, PAGE_H).lineWidth(2).strokeColor(INK).stroke();
-          doc.lineWidth(2).moveTo(PAGE_W - 110, 0).lineTo(PAGE_W - 110, PAGE_H).stroke();
-          drawSidebar(doc, sb, pageNo, hall);
-        };
-        // 栏边界：左栏(家风) 130..490；右栏(家训) 510..830（不重叠，家训左侧留白收窄）
-        // 右栏(家训)：rightX=810 leftX=510
+        // 家训区域：rightX=810，向左可延展到 510；家风区域：480..130
         const ruleRight = RIGHT_X - 60;        // 770
-        // 家训栏左侧：原 M_LEFT+250(=350)，现收窄为 RIGHT_X-300(=530)，让家训文字向左填充减少左侧留白
-        const ruleLeft = RIGHT_X - 300;        // 530
-        // 左栏(家风)
-        const styleRight = RIGHT_X - 370;      // 480
-        const styleLeft = M_LEFT + 30;         // 130
-        // 栏内各自“标题”列：置于栏右端(阅读起点)，先标题后内容
+        const ruleAreaLeft = RIGHT_X - 300;     // 530
+        const styleRight = RIGHT_X - 370;       // 480
+        const styleLeft = M_LEFT + 30;          // 130
+
+        const fontSize = 19;
+        const colGap = fontSize + 14;
+        const step = fontSize * 1.75;
+        const charsPerColumn = Math.floor((colBottom - colTop) / step);
+
+        // 家训标题
         doc.fontSize(22).fillColor('#3a2410');
-        // 家训 标题：列 830..790（栏最右端顶部）
         drawVertical(doc, '家训', { rightX: RIGHT_X, leftX: RIGHT_X - 40, topY: colTop, bottomY: colTop + 140, fontSize: 22 });
-        // 家训 内容：列 770..530
-        drawVertical(doc, toSquareBrackets(right) || '', { rightX: ruleRight, leftX: ruleLeft, topY: colTop, bottomY: colBottom, fontSize: 19, onNewPage: onNew(`${shiName}家风家训祖训`) });
-        // 家风 标题：列 490..450（左栏右端，先于其内容 480..130）
+
+        // 家训内容：按单列容量切列，在同一页内从右向左排布
+        const ruleColumns = splitByColumnCapacity(toSquareBrackets(right) || '', charsPerColumn);
+        let rx = ruleRight;
+        ruleColumns.forEach((colText) => {
+          drawVertical(doc, colText, {
+            rightX: rx,
+            leftX: ruleAreaLeft,
+            topY: colTop,
+            bottomY: colBottom,
+            fontSize,
+            colGap,
+          });
+          rx -= colGap;
+        });
+
+        // 家风标题
         drawVertical(doc, '家风', { rightX: styleRight + 40, leftX: styleRight, topY: colTop, bottomY: colTop + 140, fontSize: 22 });
-        // 家风 内容：列 480..130
-        drawVertical(doc, toSquareBrackets(left) || '', { rightX: styleRight, leftX: styleLeft, topY: colTop, bottomY: colBottom, fontSize: 19, onNewPage: onNew(`${shiName}家风家训祖训`) });
+        // 家风内容（内容通常较长，仍允许其按原有逻辑在家风区域内自动续列）
+        drawVertical(doc, toSquareBrackets(left) || '', { rightX: styleRight, leftX: styleLeft, topY: colTop, bottomY: colBottom, fontSize, colGap });
       }
     }
 

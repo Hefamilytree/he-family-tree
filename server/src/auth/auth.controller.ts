@@ -131,14 +131,19 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async wxLogin(@Body() body: { loginCode?: string; openid?: string; nickname?: string; avatar_url?: string }) {
     const b = body || ({} as any);
-    // 登录仅需 openid：loginCode 由后端 wx.login 换取 openid；不强制手机号授权
+    // 需求3：登录唯一标识必须来自 code2Session 的真实 openid。
     if (b.loginCode) {
       return this.authService.wechatLogin(b.loginCode, b.nickname, b.avatar_url);
     }
-    if (b.openid) {
+    // 仅在非生产（本地开发/调试）允许直传 openid；生产环境一律关闭，杜绝本地临时 openid 多账号问题。
+    const isProd = process.env.NODE_ENV === 'production';
+    if (b.openid && !isProd) {
       return this.authService.loginByOpenid(b.openid, b.nickname, b.avatar_url);
     }
-    return { code: 400, msg: '缺少微信标识(openid/logincode)', data: null };
+    if (b.openid && isProd) {
+      return { code: 400, msg: '请使用微信授权登录，系统将自动获取您的微信身份', data: null };
+    }
+    return { code: 400, msg: '缺少微信登录凭证，请重新点击微信一键登录', data: null };
   }
 
   @Post('phone-apply')
