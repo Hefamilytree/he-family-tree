@@ -15,10 +15,11 @@ import { PdfModule } from './pdf/pdf.module';
 import { ContactsModule } from './contacts/contacts.module';
 import { FamilyApplyModule } from './family-apply/family-apply.module';
 import { BirthdaysModule } from './birthdays/birthdays.module';
+import { MemberMigrationsModule } from '@/member-migrations/member-migrations.module';
 
 @Module({
   imports: [AuthModule, FamilyModule, MembersModule, CulturalModule, HarmonyModule, EconomicModule,
-    UploadModule, CommentsModule, RegistrationsModule, SpousesModule, PdfModule, ContactsModule, FamilyApplyModule, BirthdaysModule],
+    UploadModule, CommentsModule, RegistrationsModule, SpousesModule, PdfModule, ContactsModule, FamilyApplyModule, BirthdaysModule, MemberMigrationsModule],
   controllers: [AppController],
   providers: [AppService],
 })

@@ -87,6 +87,8 @@ export class PdfService {
             .filter((m) => (m.hasOwnProperty('parent_id') ? m.parent_id : null) === pid)
             .forEach((m) => picked.add(m.id));
           if (!pid) break; // 已到始祖辈（根）
+          // 未开启向上导出至始祖时，仅收集父辈那一代后即停止；开启才继续向上
+          if (!opts.toAncestor) break;
           p = all.find((x) => x.id === pid);
         }
       }
@@ -178,6 +180,28 @@ export class PdfService {
       startGen: Number.isNaN(startGen as number) ? undefined : startGen,
       endGen: Number.isNaN(endGen as number) ? undefined : endGen,
     }).sort(bySeniority);
+
+    // ---------- 迁徙轨迹数据（与过滤后的成员对齐） ----------
+    const migRes = await this.supabase
+      .from('member_migrations')
+      .select('*')
+      .order('created_at', { ascending: true });
+    const memberById = new Map(allMembers.map((m) => [m.id, m]));
+    const allMigrations = (migRes.data || []).map((m: any) => {
+      const mem = memberById.get(m.member_id) || ({} as RawMember);
+      return { ...m, member_name: mem.name || '未知', generation: mem.generation ?? null };
+    });
+    const inScopeIds = new Set(members.map((m) => m.id));
+    // 迁徙按成员在 members（已按字辈/长幼排序）中的顺序排列
+    const orderedMigrations: any[] = [];
+    members.forEach((mm) => {
+      allMigrations
+        .filter((mg: any) => mg.member_id === mm.id)
+        .sort((a: any, b: any) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+        .forEach((mg: any) => orderedMigrations.push(mg));
+    });
+    // 兼容：若迁徙关联的成员不在本次过滤范围（理论上不会），忽略
+    const scopeMigrations = orderedMigrations.filter((mg: any) => inScopeIds.has(mg.member_id));
 
     const cultural: CulturalItem[] = culRes.data || [];
     const byCat = (cat: string) => cultural.filter((c) => c.category === cat);
@@ -294,14 +318,16 @@ export class PdfService {
         index: members.length > 0,
         tree: members.length > 0,
         shixi: members.length > 0,
+        migrationTrack: scopeMigrations.length > 0,
         volEnd: byCat('editorial_note').some((i) => i.content) || byCat('afterword').some((i) => i.content),
         note: byCat('editorial_note').some((i) => i.content),
         afterword: byCat('afterword').some((i) => i.content),
       };
       const names: [string, string][] = [
         ['前言', 'preface'], ['一、家史', 'history'], ['二、家风', 'style'], ['三、家训', 'rule'],
-        ['四、家族字辈', 'rank'], ['五、家族事记', 'event'], ['六、世代人名索引', 'index'],
-        ['七、宗亲树', 'tree'], ['八、历代世系图', 'shixi'], ['九、卷末', 'volEnd'],
+        ['四、家族字辈', 'rank'], ['五、家族事记', 'event'], ['六、迁徙轨迹', 'migrationTrack'],
+        ['七、世代人名索引', 'index'],
+        ['八、宗亲树', 'tree'], ['九、历代世系图', 'shixi'], ['十、卷末', 'volEnd'],
       ];
       const catalog = names.filter(([, k]) => hasSec[k]).map(([t]) => t);
       doc.fontSize(26).fillColor(INK);
@@ -569,7 +595,34 @@ export class PdfService {
       }
     }
 
-    // ===== 10. 卷末（大标题）；编写说明/后记 采用左右两栏排版、内容不重叠；目录仅显示“卷末” =====
+    // ===== 10. 迁徙轨迹（第X世 姓名 从XXX地迁徙至XXX地） =====
+    {
+      if (scopeMigrations.length) {
+        newPaper(`${shiName}迁徙轨迹`);
+        pageTitle('迁徙轨迹');
+        const maxW = RIGHT_X - M_LEFT;
+        let y = M_TOP + 90;
+        const lines = scopeMigrations.map((mg: any) => {
+          const genTxt = mg.generation ? `第${toChineseNum(mg.generation)}世` : '世数未详';
+          const eraTxt = mg.era ? `${mg.era}，` : '';
+          const fromTxt = mg.from_place ? `${mg.from_place}地` : '';
+          const toTxt = mg.to_place ? `${mg.to_place}地` : '';
+          return `${genTxt} ${mg.member_name || '未知'} 从${fromTxt}迁徙至${toTxt}`;
+        });
+        lines.forEach((ln: string) => {
+          const h = Math.max(30, doc.heightOfString(ln, { width: maxW }) + 12);
+          if (y + h > BOTTOM_Y) {
+            newPaper(`${shiName}迁徙轨迹`);
+            pageTitle('迁徙轨迹');
+            y = M_TOP + 90;
+          }
+          doc.fontSize(20).fillColor(INK).text(ln, M_LEFT + 6, y, { width: maxW });
+          y += h;
+        });
+      }
+    }
+
+    // ===== 11. 卷末（大标题）；编写说明/后记 采用左右两栏排版、内容不重叠；目录仅显示“卷末” =====
     {
       const ps = byCat('afterword').map((i) => i.content).filter(Boolean).join('\n');
       const note = byCat('editorial_note').map((i) => i.content).filter(Boolean).join('\n');

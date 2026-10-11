@@ -84,22 +84,41 @@ export default function Export() {
 
   // 父辈所有亲兄弟：以所选宗亲为基准，取其父亲的全部子女（含本人与所有亲兄弟），
   // 并向上带上父亲本人，使打印脉络完整；数据全部关联成员表。
-  const getFatherSiblings = (baseId: string): Member[] => {
+  // 若开启“向上导出至始祖”，则从父辈起逐代向上收集每一代同辈亲兄弟（含配偶）直至始祖，不含本人辈及子女。
+  const getFatherSiblings = (baseId: string, up: boolean): Member[] => {
     if (!baseId) return [];
-    const base = members.find((m) => m.id === baseId);
+    const membersAll = members;
+    const base = membersAll.find((m) => m.id === baseId);
     if (!base) return [];
     const fatherId = base.parent_id;
     let father: Member | undefined;
     let anchorId = fatherId;
     if (fatherId) {
-      father = members.find((m) => m.id === fatherId);
+      father = membersAll.find((m) => m.id === fatherId);
     } else {
       // 所选人本身即父辈：以本人为锚，取与其同父者
       father = base;
       anchorId = base.id;
     }
+    if (up) {
+      // 从父辈起逐代向上，每代收集同辈亲兄弟，直至始祖
+      const picked = new Set<string>();
+      let p: Member | undefined = father || base;
+      const seen = new Set<string>();
+      let guard = 0;
+      while (p && !seen.has(p.id) && guard++ < 500) {
+        seen.add(p.id);
+        const pid = p.parent_id || null;
+        membersAll
+          .filter((m) => (m.parent_id || null) === pid)
+          .forEach((m) => picked.add(m.id));
+        if (!pid) break;
+        p = membersAll.find((m) => m.id === pid);
+      }
+      return membersAll.filter((m) => picked.has(m.id));
+    }
     const siblings = anchorId
-      ? members.filter((m) => m.parent_id === anchorId)
+      ? membersAll.filter((m) => m.parent_id === anchorId)
       : [base];
     return father ? [father, ...siblings] : siblings;
   };
@@ -107,7 +126,7 @@ export default function Export() {
   const exportMembers = exportMode === 'full'
     ? members
     : exportMode === 'siblings'
-      ? getFatherSiblings(selectedBranch)
+      ? getFatherSiblings(selectedBranch, includeAncestor)
       : selectedBranch
         ? getBranchMembers(selectedBranch)
         : [];
@@ -206,8 +225,8 @@ export default function Export() {
             </View>
           )}
 
-          {/* 分支导出：向上至始祖开关（分支族谱专用） */}
-          {exportMode === 'branch' && (
+          {/* 分支导出/父辈亲兄弟：向上至始祖开关（分支族谱、父辈亲兄弟共用） */}
+          {(exportMode === 'branch' || exportMode === 'siblings') && (
             <View className="flex items-center justify-between mb-3">
               <Text className="block text-sm" style={{ color: '#6B5B4F' }}>向上导出至始祖</Text>
               <View

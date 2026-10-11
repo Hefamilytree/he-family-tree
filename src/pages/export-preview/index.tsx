@@ -53,6 +53,16 @@ interface Section {
   location?: string;
 }
 
+interface Migration {
+  id: string;
+  member_id: string;
+  era?: string | null;
+  from_place?: string | null;
+  to_place?: string | null;
+  member_name?: string | null;
+  generation?: number | null;
+}
+
 const isMiniApp = ['WEAPP', 'TT'].includes(Taro.getEnv() as any);
 
 /** 古籍标点转换：小括号（）→方头括号 ︻︼；《》书名号→﹏ */
@@ -74,6 +84,7 @@ const ExportPreviewPage: React.FC = () => {
   const [family, setFamily] = useState<Family | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
+  const [migrations, setMigrations] = useState<Migration[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
@@ -100,13 +111,15 @@ const ExportPreviewPage: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [famRes, memRes, secRes] = await Promise.all([
+      const [famRes, memRes, secRes, migRes] = await Promise.all([
         Network.request({ url: '/api/family' }),
         Network.request({ url: '/api/members' }),
         Network.request({ url: '/api/cultural' }),
+        Network.request({ url: '/api/member-migrations' }),
       ]);
       console.log('[export-preview] family:', famRes.data);
       console.log('[export-preview] members:', memRes.data);
+      console.log('[export-preview] migrations:', migRes.data);
       // /api/family 返回单个家族对象（可能为 null）
       const famPayload = famRes.data?.data;
       const fam: Family | null = famPayload
@@ -116,12 +129,13 @@ const ExportPreviewPage: React.FC = () => {
         : null;
       const allMembers: Member[] = memRes.data?.data || [];
       const allSections: Section[] = secRes.data?.data || [];
+      const allMigrations: Migration[] = migRes.data?.data || [];
 
       setFamily(fam);
 
       let filtered = [...allMembers];
       if (exportMode === 'siblings' && branchId) {
-        // 父辈亲兄弟：从「父亲辈」起逐代向上收集每一代同辈亲兄弟，直到始祖辈；不含本人辈及子女
+        // 父辈亲兄弟：优先取所选宗亲的父辈那一代亲兄弟；勾选「向上导出至始祖」才逐代向上收集至始祖辈，不含本人辈及子女
         const picked = new Set<string>();
         const base = allMembers.find((m) => m.id === branchId);
         if (base) {
@@ -138,6 +152,8 @@ const ExportPreviewPage: React.FC = () => {
               .filter((m) => ((m as any).parent_id || null) === pid)
               .forEach((m) => picked.add(m.id));
             if (!pid) break;
+            // 未开启向上导出至始祖时，仅收集父辈那一代后即停止；开启才继续向上
+            if (!includeAncestor) break;
             p = allMembers.find((m) => m.id === pid);
           }
         }
@@ -202,6 +218,7 @@ const ExportPreviewPage: React.FC = () => {
       filtered.sort((a, b) => (a.generation ?? 0) - (b.generation ?? 0));
       setMembers(filtered);
       setSections(allSections);
+      setMigrations(allMigrations);
     } catch (e) {
       console.error('加载导出数据失败', e);
       Taro.showToast({ title: '加载失败，请重试', icon: 'none' });
@@ -229,6 +246,25 @@ const ExportPreviewPage: React.FC = () => {
 
   const yearText = new Date().getFullYear();
   const bodyCount = members.length;
+
+  // 迁徙轨迹：仅展示本次打印范围内的成员迁徙（第X世 姓名 从XXX地迁徙至XXX地）
+  const migMap = new Map<string, Migration[]>();
+  migrations.forEach((mg) => {
+    if (!migMap.has(mg.member_id)) migMap.set(mg.member_id, []);
+    migMap.get(mg.member_id)!.push(mg);
+  });
+  const migLines: string[] = [];
+  members.forEach((m) => {
+    (migMap.get(m.id) || [])
+      .slice()
+      .sort((a, b) => (a.era || '').localeCompare(b.era || ''))
+      .forEach((mg) => {
+        const genTxt = m.generation ? `第${toChineseNum(m.generation)}世` : '世数未详';
+        const fromTxt = mg.from_place ? `${mg.from_place}地` : '';
+        const toTxt = mg.to_place ? `${mg.to_place}地` : '';
+        migLines.push(`${genTxt} ${m.name} 从${fromTxt}迁徙至${toTxt}`);
+      });
+  });
 
   // 生成竖排列（内容自动转换为方头括号）
   const vText = (label: string, value: string) => (
@@ -418,12 +454,13 @@ const ExportPreviewPage: React.FC = () => {
             <Text className="v-col">二、家训家风</Text>
             <Text className="v-col">三、字辈谱</Text>
             <Text className="v-col">四、家族事记</Text>
+            <Text className="v-col">五、迁徙轨迹</Text>
             <Text className="v-col" style={{ color: '#8b2500' }}>世系</Text>
             <Text className="v-col">{`第 ${sortedGens[0] || 1} — ${sortedGens[sortedGens.length - 1] || 1} 世`}</Text>
             <Text className="v-col">{`录入 ${bodyCount} 位`}</Text>
             <Text className="v-col" style={{ color: '#8b2500' }}>卷末</Text>
-            <Text className="v-col">五、后记</Text>
-            <Text className="v-col">六、编写说明</Text>
+            <Text className="v-col">六、后记</Text>
+            <Text className="v-col">七、编写说明</Text>
           </View>
         </Sheet>
 
@@ -518,6 +555,18 @@ const ExportPreviewPage: React.FC = () => {
             </View>
           </Sheet>
         ))}
+
+        {/* ===== 迁徙轨迹 ===== */}
+        {migLines.length > 0 && (
+          <Sheet sidebar={sidebarText}>
+            <Text className="v-title block mb-4" style={{ fontSize: '38rpx' }}>迁徙轨迹</Text>
+            <View className="v-columns">
+              {migLines.map((ln, i) => (
+                <Text key={i} className="v-col">{toBox(ln)}</Text>
+              ))}
+            </View>
+          </Sheet>
+        )}
 
         {/* ===== 卷末 ===== */}
         <Sheet sidebar={sidebarText}>

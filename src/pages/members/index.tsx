@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { toLunarBirth, formatBirthFull, BIRTH_TIME_OPTIONS } from '@/utils/lunar';
+import { toLunarBirth, formatBirthFull } from '@/utils/lunar';
+import DateTimePicker from '@/components/date-time-picker';
 import { Network } from '@/network';
 import { getAuthUser, memberDetailVisible, canManageMember, isAdmin } from '@/utils/permission';
 
@@ -62,6 +63,13 @@ interface GenerationOption {
   title: string;
 }
 
+interface MigrationItem {
+  id?: string;
+  era: string;        // 时代/年份
+  fromPlace: string;  // 迁出地点
+  toPlace: string;    // 迁入地点
+}
+
 export default function Members() {
   const [members, setMembers] = useState<Member[]>([]);
   const [filteredMembers, setFilteredMembers] = useState<Member[]>([]);
@@ -88,8 +96,7 @@ export default function Members() {
   const [formCourtesy, setFormCourtesy] = useState('');
   const [formGender, setFormGender] = useState('male');
   const [formGenIndex, setFormGenIndex] = useState(0); // 字辈选项下标（0 起）
-  const [formBirthDate, setFormBirthDate] = useState('');
-  const [formBirthTime, setFormBirthTime] = useState('');
+  const [formBirthDate, setFormBirthDate] = useState(''); // 完整日期：YYYY-MM-DD 或 YYYY-MM-DD HH:mm
   const [formPhone, setFormPhone] = useState('');
   const [formDeathDate, setFormDeathDate] = useState('');
   const [formParentId, setFormParentId] = useState('');
@@ -98,6 +105,10 @@ export default function Members() {
   const [formIsAlive, setFormIsAlive] = useState('yes');
   const [formBirthPlace, setFormBirthPlace] = useState('');
   const [formBurialPlace, setFormBurialPlace] = useState('');
+  // 迁徙行：仅管理员维护；自动关联成员世代/姓名，只需录入时代年份、迁出地、迁入地
+  const [formMigrations, setFormMigrations] = useState<MigrationItem[]>([]);
+  // 记录编辑前已存在的迁徙行 id，用于识别被删除的行
+  const [formOrigMigIds, setFormOrigMigIds] = useState<string[]>([]);
 
   const loadData = async () => {
     setLoading(true);
@@ -186,7 +197,6 @@ export default function Members() {
     setFormGender('male');
     setFormGenIndex(0);
     setFormBirthDate('');
-    setFormBirthTime('');
     setFormPhone('');
     setFormDeathDate('');
     setFormParentId('');
@@ -195,6 +205,7 @@ export default function Members() {
     setFormIsAlive('yes');
     setFormBirthPlace('');
     setFormBurialPlace('');
+    setFormMigrations([]);
     setEditingMember(null);
   };
 
@@ -203,14 +214,13 @@ export default function Members() {
     setShowAddForm(true);
   };
 
-  const handleEdit = (member: Member, optionsArg?: GenerationOption[]) => {
+  const handleEdit = async (member: Member, optionsArg?: GenerationOption[]) => {
     const options = optionsArg || generationOptions;
     setEditingMember(member);
     setFormName(member.name);
     setFormCourtesy(member.courtesy_name || '');
     setFormGender(member.gender);
     setFormBirthDate(member.birth_date || '');
-    setFormBirthTime(member.birth_time || '');
     setFormPhone(member.phone || '');
     setFormDeathDate(member.death_date || '');
     setFormParentId(member.parent_id || '');
@@ -236,6 +246,27 @@ export default function Members() {
       idx = Math.max(0, Math.min(idx, options.length - 1));
     }
     setFormGenIndex(idx);
+    // 加载该成员已有的迁徙行
+    if (member.id) {
+      try {
+        const migRes = await Network.request({ url: `/api/member-migrations?memberId=${member.id}`, header: authHeader() });
+        const rows = (migRes.data?.data || []).map((r: any) => ({
+          id: r.id,
+          era: r.era || '',
+          fromPlace: r.from_place || '',
+          toPlace: r.to_place || '',
+        }));
+        setFormMigrations(rows);
+        setFormOrigMigIds(rows.map((r: any) => r.id));
+      } catch (e) {
+        console.error('加载迁徙行失败:', e);
+        setFormMigrations([]);
+        setFormOrigMigIds([]);
+      }
+    } else {
+      setFormMigrations([]);
+      setFormOrigMigIds([]);
+    }
     setShowAddForm(true);
   };
 
@@ -278,7 +309,6 @@ export default function Members() {
         generation_title: genTitle,
         is_alive: formIsAlive,
         birth_date: formBirthDate || null,
-        birth_time: formBirthTime || null,
         phone: formPhone || null,
         death_date: formIsAlive === 'no' ? (formDeathDate || null) : null,
         parent_id: formParentId || null,
@@ -327,10 +357,37 @@ export default function Members() {
             },
           }).catch((err) => console.error('保存配偶失败:', err));
         }
+
+        // 同步迁徙行：删除本次被移除的旧行，保存/新增其余行
+        const keepIds = formMigrations.filter((mg) => mg.id).map((mg) => mg.id!);
+        const removeIds = formOrigMigIds.filter((id) => !keepIds.includes(id));
+        for (const rid of removeIds) {
+          await Network.request({ url: `/api/member-migrations/${rid}`, method: 'DELETE', header: authHeader() }).catch(() => null);
+        }
+        // 保存/更新表单中的每一行
+        for (const mg of formMigrations || []) {
+          if (!String(mg.era || '').trim() && !String(mg.fromPlace || '').trim() && !String(mg.toPlace || '').trim()) continue;
+          if (mg.id) {
+            await Network.request({
+              url: `/api/member-migrations/${mg.id}`,
+              method: 'PUT',
+              header: authHeader(),
+              data: { era: mg.era.trim(), fromPlace: mg.fromPlace.trim(), toPlace: mg.toPlace.trim() },
+            }).catch((err) => console.error('更新迁徙行失败:', err));
+          } else {
+            await Network.request({
+              url: '/api/member-migrations',
+              method: 'POST',
+              header: authHeader(),
+              data: { memberId: savedId, era: mg.era.trim(), fromPlace: mg.fromPlace.trim(), toPlace: mg.toPlace.trim() },
+            }).catch((err) => console.error('保存迁徙行失败:', err));
+          }
+        }
       }
 
       setShowAddForm(false);
       resetForm();
+      setFormOrigMigIds([]);
       loadData();
     } catch (e) {
       console.error('保存失败:', e);
@@ -501,30 +558,12 @@ export default function Members() {
               <View className="flex gap-3 mb-3">
                 <View className="flex-1">
                   <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>出生日期</Text>
-                  <View className="bg-[#FFFDF7] rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
-                    <Input className="w-full bg-transparent" placeholder="如：1950" value={formBirthDate} onInput={(e) => setFormBirthDate(e.detail.value)} />
-                  </View>
-                </View>
-                <View className="flex-1">
-                  <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>出生时辰</Text>
-                  <Select value={formBirthTime || '__none__'} onValueChange={(v) => setFormBirthTime(v === '__none__' ? '' : v)}>
-                    <SelectTrigger className="w-full bg-[#FFFDF7] border rounded-lg" style={{ borderColor: '#E8E0D8' }}>
-                      <SelectValue placeholder="时辰（可不填）" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">不填时辰</SelectItem>
-                      {BIRTH_TIME_OPTIONS.map(o => (
-                        <SelectItem key={o} value={o.slice(0, 2)}>{o}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <DateTimePicker value={formBirthDate} placeholder="请选择出生日期" onValueChange={setFormBirthDate} />
                 </View>
                 {formIsAlive === 'no' && (
                   <View className="flex-1">
                     <Text className="block text-sm mb-1" style={{ color: '#6B5B4F' }}>逝世日期</Text>
-                    <View className="bg-[#FFFDF7] rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
-                      <Input className="w-full bg-transparent" placeholder="如：2020" value={formDeathDate} onInput={(e) => setFormDeathDate(e.detail.value)} />
-                    </View>
+                    <DateTimePicker value={formDeathDate} placeholder="请选择逝世日期" onValueChange={setFormDeathDate} />
                   </View>
                 )}
               </View>
@@ -606,16 +645,12 @@ export default function Members() {
                     <View className="flex gap-2 mt-2">
                       <View className="flex-1">
                         <Text className="block text-xs mb-1" style={{ color: '#6B5B4F' }}>出生日期</Text>
-                        <View className="bg-[#FFFDF7] rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
-                          <Input className="w-full bg-transparent" placeholder="如：1952" value={spouse.birthDate || ''} onInput={(e) => handleUpdateSpouse(idx, 'birthDate', e.detail.value)} />
-                        </View>
+                        <DateTimePicker value={spouse.birthDate || ''} placeholder="选择出生日期" onValueChange={(v) => handleUpdateSpouse(idx, 'birthDate', v)} />
                       </View>
                       {spouse.status === 'deceased' && (
                         <View className="flex-1">
                           <Text className="block text-xs mb-1" style={{ color: '#6B5B4F' }}>逝世日期</Text>
-                          <View className="bg-[#FFFDF7] rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
-                            <Input className="w-full bg-transparent" placeholder="如：2018" value={spouse.deathDate || ''} onInput={(e) => handleUpdateSpouse(idx, 'deathDate', e.detail.value)} />
-                          </View>
+                          <DateTimePicker value={spouse.deathDate || ''} placeholder="选择逝世日期" onValueChange={(v) => handleUpdateSpouse(idx, 'deathDate', v)} />
                         </View>
                       )}
                     </View>
@@ -642,6 +677,55 @@ export default function Members() {
                   </View>
                 ))}
               </View>
+
+              {/* 迁徙行：仅管理员维护；世代/姓名自动关联当前成员 */}
+              {canManage && (
+                <View className="mb-4">
+                  <View className="flex items-center justify-between mb-1">
+                    <Text className="block text-sm font-medium" style={{ color: '#8B2500' }}>迁徙行</Text>
+                    <Button size="sm" variant="outline" onClick={() => setFormMigrations([...formMigrations, { era: '', fromPlace: '', toPlace: '' }])}>
+                      <Plus size={14} color="#8B2500" />
+                      <Text className="text-xs ml-1">添加迁徙</Text>
+                    </Button>
+                  </View>
+                  <Text className="block text-xs mb-2" style={{ color: '#B0A795' }}>
+                    自动关联：第{generationOptions[formGenIndex] ? generationOptions[formGenIndex].title || (formGenIndex + 1) + '世' : (formGenIndex + 1) + '世'}世 · {formName || '（未填姓名）'}
+                  </Text>
+                  {formMigrations.length === 0 && (
+                    <Text className="block text-xs" style={{ color: '#B0A795' }}>暂无迁徙记录，可点右上「添加迁徙」录入</Text>
+                  )}
+                  {formMigrations.map((mg, idx) => (
+                    <View key={idx} className="border rounded-lg p-3 mb-2" style={{ borderColor: '#E8E0D8', backgroundColor: '#FFFDF7' }}>
+                      <View className="flex items-center justify-between mb-2">
+                        <Text className="block text-xs font-medium" style={{ color: '#6B5B4F' }}>迁徙记录 {idx + 1}</Text>
+                        <View className="p-1 rounded" style={{ backgroundColor: '#FFEBEE' }} onClick={() => setFormMigrations(formMigrations.filter((_, i) => i !== idx))}>
+                          <X size={13} color="#C62828" />
+                        </View>
+                      </View>
+                      <View className="mb-2">
+                        <Text className="block text-xs mb-1" style={{ color: '#6B5B4F' }}>时代 / 年份</Text>
+                        <View className="bg-white rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
+                          <Input className="w-full bg-transparent" placeholder="如：洪武年间 / 1950" value={mg.era} onInput={(e) => setFormMigrations(formMigrations.map((x, i) => i === idx ? { ...x, era: e.detail.value } : x))} />
+                        </View>
+                      </View>
+                      <View className="flex gap-2">
+                        <View className="flex-1">
+                          <Text className="block text-xs mb-1" style={{ color: '#6B5B4F' }}>迁出地点</Text>
+                          <View className="bg-white rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
+                            <Input className="w-full bg-transparent" placeholder="迁出地" value={mg.fromPlace} onInput={(e) => setFormMigrations(formMigrations.map((x, i) => i === idx ? { ...x, fromPlace: e.detail.value } : x))} />
+                          </View>
+                        </View>
+                        <View className="flex-1">
+                          <Text className="block text-xs mb-1" style={{ color: '#6B5B4F' }}>迁入地点</Text>
+                          <View className="bg-white rounded-lg p-2 border" style={{ borderColor: '#E8E0D8' }}>
+                            <Input className="w-full bg-transparent" placeholder="迁入地" value={mg.toPlace} onInput={(e) => setFormMigrations(formMigrations.map((x, i) => i === idx ? { ...x, toPlace: e.detail.value } : x))} />
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
 
               <View className="flex gap-3">
                 <Button className="flex-1" variant="outline" onClick={() => { setShowAddForm(false); resetForm(); }}>

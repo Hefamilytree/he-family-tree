@@ -48,7 +48,10 @@ export function formatBirthFull(
 export function toLunarBirth(dateStr?: string | null): string {
   if (!dateStr) return ''
   const d = String(dateStr).trim()
-  const m = d.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/)
+  // 兼容带时分（YYYY-MM-DD HH:mm）或带时分秒的日期，先从后往前切出 HH:mm
+  const tMinute = d.match(/\d{1,2}[:：]\d{1,2}/)
+  const tText = tMinute ? `${tMinute[0]}分` : ''
+  const m = d.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/)
   if (!m) {
     // 非完整日期：可能是纯年份，原样返回
     return d
@@ -61,7 +64,7 @@ export function toLunarBirth(dateStr?: string | null): string {
     const year = lunar.getYearInChinese()
     const month = lunar.getMonthInChinese()
     const dayCn = lunar.getDayInChinese()
-    return `${year}年${month}月${dayCn}`
+    return tText ? `${year}年${month}月${dayCn}${tText}` : `${year}年${month}月${dayCn}`
   } catch (e) {
     return d
   }
