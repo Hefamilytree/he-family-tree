@@ -307,7 +307,7 @@ export class PdfService {
     {
       newPaper(`${shiName}家族总目录`);
       pageTitle('目 录');
-      // 目录与正文顺序保持一致：封面→前言→目录→家史→家风家训→字辈→事记→索引→宗亲树→世系→卷末→编写说明→后记；无内容板块自动跳过
+      // 目录与正文顺序保持一致：封面→前言→目录→家史→迁徙轨迹→家风家训→字辈→事记→索引→宗亲树→世系→卷末；无内容板块自动跳过
       const hasSec: Record<string, boolean> = {
         preface: byCat('preface').some((i) => i.content) || !!family.description || !!family.origin,
         history: ['merit', 'migration'].some((c) => byCat(c).some((i) => i.content)) || !!family.origin || !!family.description,
@@ -324,8 +324,9 @@ export class PdfService {
         afterword: byCat('afterword').some((i) => i.content),
       };
       const names: [string, string][] = [
-        ['前言', 'preface'], ['一、家史', 'history'], ['二、家风', 'style'], ['三、家训', 'rule'],
-        ['四、家族字辈', 'rank'], ['五、家族事记', 'event'], ['六、迁徙轨迹', 'migrationTrack'],
+        ['前言', 'preface'], ['一、家史', 'history'], ['二、迁徙轨迹', 'migrationTrack'],
+        ['三、家风', 'style'], ['四、家训', 'rule'],
+        ['五、家族字辈', 'rank'], ['六、家族事记', 'event'],
         ['七、世代人名索引', 'index'],
         ['八、宗亲树', 'tree'], ['九、历代世系图', 'shixi'], ['十、卷末', 'volEnd'],
       ];
@@ -350,7 +351,33 @@ export class PdfService {
       if (text) verticalText(text, `${shiName}家史`, '家史');
     }
 
-    // ===== 5. 家风 / 家训（两栏并列；家训按列容量自动分列、在同一页内完整排布，避免打印跨页） =====
+    // ===== 5. 迁徙轨迹（位于家史之后、家风家训之前；第X世 姓名 从XXX地迁徙至XXX地） =====
+    {
+      if (scopeMigrations.length) {
+        newPaper(`${shiName}迁徙轨迹`);
+        pageTitle('迁徙轨迹');
+        const maxW = RIGHT_X - M_LEFT;
+        let y = M_TOP + 90;
+        const lines = scopeMigrations.map((mg: any) => {
+          const genTxt = mg.generation ? `第${toChineseNum(mg.generation)}世` : '世数未详';
+          const fromTxt = mg.from_place ? `${mg.from_place}地` : '';
+          const toTxt = mg.to_place ? `${mg.to_place}地` : '';
+          return `${genTxt} ${mg.member_name || '未知'} 从${fromTxt}迁徙至${toTxt}`;
+        });
+        lines.forEach((ln: string) => {
+          const h = Math.max(30, doc.heightOfString(ln, { width: maxW }) + 12);
+          if (y + h > BOTTOM_Y) {
+            newPaper(`${shiName}迁徙轨迹`);
+            pageTitle('迁徙轨迹');
+            y = M_TOP + 90;
+          }
+          doc.fontSize(20).fillColor(INK).text(ln, M_LEFT + 6, y, { width: maxW });
+          y += h;
+        });
+      }
+    }
+
+    // ===== 6. 家风 / 家训（两栏并列；家训按列容量自动分列、在同一页内完整排布，避免打印跨页） =====
     {
       const familyStyle = byCat('family_style').concat(byCat('family_motto')).map((i) => i.content).filter(Boolean).join('\n');
       const familyRule = [family.motto, ...byCat('family_instruction').map((i) => i.content).filter(Boolean)]
@@ -595,34 +622,7 @@ export class PdfService {
       }
     }
 
-    // ===== 10. 迁徙轨迹（第X世 姓名 从XXX地迁徙至XXX地） =====
-    {
-      if (scopeMigrations.length) {
-        newPaper(`${shiName}迁徙轨迹`);
-        pageTitle('迁徙轨迹');
-        const maxW = RIGHT_X - M_LEFT;
-        let y = M_TOP + 90;
-        const lines = scopeMigrations.map((mg: any) => {
-          const genTxt = mg.generation ? `第${toChineseNum(mg.generation)}世` : '世数未详';
-          const eraTxt = mg.era ? `${mg.era}，` : '';
-          const fromTxt = mg.from_place ? `${mg.from_place}地` : '';
-          const toTxt = mg.to_place ? `${mg.to_place}地` : '';
-          return `${genTxt} ${mg.member_name || '未知'} 从${fromTxt}迁徙至${toTxt}`;
-        });
-        lines.forEach((ln: string) => {
-          const h = Math.max(30, doc.heightOfString(ln, { width: maxW }) + 12);
-          if (y + h > BOTTOM_Y) {
-            newPaper(`${shiName}迁徙轨迹`);
-            pageTitle('迁徙轨迹');
-            y = M_TOP + 90;
-          }
-          doc.fontSize(20).fillColor(INK).text(ln, M_LEFT + 6, y, { width: maxW });
-          y += h;
-        });
-      }
-    }
-
-    // ===== 11. 卷末（大标题）；编写说明/后记 采用左右两栏排版、内容不重叠；目录仅显示“卷末” =====
+    // ===== 10. 卷末（大标题）；编写说明/后记 采用左右两栏排版、内容不重叠；目录仅显示“卷末” =====
     {
       const ps = byCat('afterword').map((i) => i.content).filter(Boolean).join('\n');
       const note = byCat('editorial_note').map((i) => i.content).filter(Boolean).join('\n');

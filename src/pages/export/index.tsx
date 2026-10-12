@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, ScrollView } from '@tarojs/components';
+import { View, Text } from '@tarojs/components';
 import Taro, { useDidShow } from '@tarojs/taro';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,7 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { Printer, TreePine, Users } from 'lucide-react-taro';
 import { Network } from '@/network';
-import { getAuthUser, canPrint } from '@/utils/permission';
+import { getAuthUser, canPrint, permissionLevel, type AuthUser } from '@/utils/permission';
 
 interface FamilyInfo {
   id: string;
@@ -36,8 +36,9 @@ export default function Export() {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [exportMode, setExportMode] = useState<'full' | 'branch' | 'siblings'>('full');
-  const [selectedBranch, setSelectedBranch] = useState<string>('');
   const [includeAncestor, setIncludeAncestor] = useState(false);
+  // 当前登录认证宗亲：分支族谱/父辈亲兄弟自动以其为分支基准，无需人工选择
+  const [authUser, setAuthUser] = useState<AuthUser | null>(getAuthUser());
   const [startGen, setStartGen] = useState('');
   const [endGen, setEndGen] = useState('');
 
@@ -59,12 +60,12 @@ export default function Export() {
     }
   };
 
-  useDidShow(() => { loadData(); });
+  useDidShow(() => { setAuthUser(getAuthUser()); loadData(); });
 
-  // 分支列表：全部成员（世代升序，实现"由下往上选"，可任选一代/任意成员作为分支根）
-  const branches = [...members].sort(
-    (a, b) => (a.generation || 1) - (b.generation || 1) || (a.name || '').localeCompare(b.name || '', 'zh')
-  );
+  // 自动关联：当前认证宗亲即分支/父辈亲兄弟的基准成员
+  const anchorId = authUser?.member_id || '';
+  const anchorMember = members.find((m) => m.id === anchorId) || null;
+  const anchorReady = !!(anchorId && anchorMember);
 
   // 获取指定分支的所有后代
   const getBranchMembers = (rootId: string): Member[] => {
@@ -92,13 +93,13 @@ export default function Export() {
     if (!base) return [];
     const fatherId = base.parent_id;
     let father: Member | undefined;
-    let anchorId = fatherId;
+    let sibAnchorId = fatherId;
     if (fatherId) {
       father = membersAll.find((m) => m.id === fatherId);
     } else {
       // 所选人本身即父辈：以本人为锚，取与其同父者
       father = base;
-      anchorId = base.id;
+      sibAnchorId = base.id;
     }
     if (up) {
       // 从父辈起逐代向上，每代收集同辈亲兄弟，直至始祖
@@ -117,8 +118,8 @@ export default function Export() {
       }
       return membersAll.filter((m) => picked.has(m.id));
     }
-    const siblings = anchorId
-      ? membersAll.filter((m) => m.parent_id === anchorId)
+    const siblings = sibAnchorId
+      ? membersAll.filter((m) => m.parent_id === sibAnchorId)
       : [base];
     return father ? [father, ...siblings] : siblings;
   };
@@ -126,9 +127,9 @@ export default function Export() {
   const exportMembers = exportMode === 'full'
     ? members
     : exportMode === 'siblings'
-      ? getFatherSiblings(selectedBranch, includeAncestor)
-      : selectedBranch
-        ? getBranchMembers(selectedBranch)
+      ? getFatherSiblings(anchorId, includeAncestor)
+      : anchorId
+        ? getBranchMembers(anchorId)
         : [];
 
   // 按世代分组
@@ -140,12 +141,16 @@ export default function Export() {
   const sortedGens = Object.keys(generations).map(Number).sort((a, b) => a - b);
 
   const handlePreview = () => {
-    if (!canPrint(getAuthUser())) {
+    if (!canPrint(authUser)) {
       Taro.showToast({ title: '需认证宗亲身份后方可打印族谱', icon: 'none' });
       return;
     }
+    if (exportMode !== 'full' && !anchorReady) {
+      Taro.showToast({ title: '未关联到您的宗亲档案，请先在“我的”完成认证', icon: 'none' });
+      return;
+    }
     Taro.navigateTo({
-      url: `/pages/export-preview/index?mode=${exportMode}&branch=${selectedBranch || ''}&toAncestor=${includeAncestor ? '1' : '0'}&startGen=${startGen}&endGen=${endGen}`
+      url: `/pages/export-preview/index?mode=${exportMode}&branch=${anchorId || ''}&toAncestor=${includeAncestor ? '1' : '0'}&startGen=${startGen}&endGen=${endGen}`
     });
   };
 
@@ -186,7 +191,7 @@ export default function Export() {
               >
                 <Users size={32} color={exportMode === 'branch' ? '#8B2500' : '#999'} className="mb-2" />
                 <Text className="text-sm font-bold" style={{ color: exportMode === 'branch' ? '#8B2500' : '#6B5B4F' }}>分支族谱</Text>
-                <Text className="text-xs mt-1" style={{ color: '#999' }}>导出指定分支</Text>
+                <Text className="text-xs mt-1" style={{ color: '#999' }}>导出本人所属分支</Text>
               </View>
               <View
                 className="flex-1 p-4 rounded-xl border-2 flex flex-col items-center"
@@ -200,28 +205,24 @@ export default function Export() {
             </View>
           </View>
 
-          {/* 基准宗亲选择（分支族谱 / 父辈亲兄弟共用） */}
-          {(exportMode === 'branch' || exportMode === 'siblings') && branches.length > 0 && (
-            <View className="mb-4">
-              <Text className="block text-sm mb-2" style={{ color: '#6B5B4F' }}>
-                {exportMode === 'siblings' ? '选择宗亲（以此人的父辈亲兄弟为准）' : '选择分支'}
+          {/* 基准宗亲：自动关联当前登录认证宗亲所属分支（不再手动选择） */}
+          {(exportMode === 'branch' || exportMode === 'siblings') && (
+            <View className="mb-4 p-3 rounded-lg" style={{ backgroundColor: '#FFF5F0', border: '1px solid #E8D8CE' }}>
+              <Text className="block text-sm" style={{ color: '#6B5B4F' }}>
+                {exportMode === 'siblings' ? '基准宗亲（以此人的父辈亲兄弟为准）' : '导出分支'}
               </Text>
-              <ScrollView scrollX className="flex gap-2 pb-2">
-                {branches.map(branch => (
-                  <View
-                    key={branch.id}
-                    className="px-4 py-2 rounded-full whitespace-nowrap border-2"
-                    style={{
-                      borderColor: selectedBranch === branch.id ? '#8B2500' : '#E8E0D8',
-                      backgroundColor: selectedBranch === branch.id ? '#8B2500' : '#FFFDF7',
-                      color: selectedBranch === branch.id ? '#FFFDF7' : '#6B5B4F'
-                    }}
-                    onClick={() => setSelectedBranch(branch.id)}
-                  >
-                    <Text className="text-sm">第{branch.generation}世 · {branch.name}</Text>
-                  </View>
-                ))}
-              </ScrollView>
+              {anchorReady ? (
+                <Text className="block text-base font-bold mt-1" style={{ color: '#8B2500' }}>
+                  {anchorMember && `第${anchorMember.generation}世 · ${anchorMember.name}`}
+                </Text>
+              ) : (
+                <Text className="block text-sm mt-1" style={{ color: '#C0392B' }}>
+                  {permissionLevel(authUser) < 1 ? '请先登录' : '当前账号未关联宗亲档案，请先在“我的”完成认证'}
+                </Text>
+              )}
+              <Text className="block text-xs mt-1" style={{ color: '#B0A090' }}>
+                系统已自动关联当前认证宗亲所属分支，无需手动选择
+              </Text>
             </View>
           )}
 
@@ -249,8 +250,8 @@ export default function Export() {
               </View>
               <Text className="block text-xs mt-2" style={{ color: '#B0A090' }}>
                 {exportMode === 'siblings'
-                  ? '父辈亲兄弟：从所选宗亲的父辈起逐代向上收录到始祖的每一代亲兄弟，只收录人物及其配偶，不收录子女。'
-                  : '提示：在下方任选一位宗亲作为分支（由下往上选择导出）；勾选“向上导出至始祖”会包含该分支向上到始祖一脉。'}
+                  ? '父辈亲兄弟：以当前认证宗亲为基准，从其父辈起逐代向上收录到始祖的每一代亲兄弟，只收录人物及其配偶，不收录子女。'
+                  : '提示：自动以当前认证宗亲为分支根（含本人及其全部后代）；勾选“向上导出至始祖”会包含该分支向上到始祖一脉。'}
               </Text>
             </View>
           )}
@@ -266,13 +267,13 @@ export default function Export() {
             className="w-full"
             style={{ backgroundColor: '#8B2500', color: '#FFFDF7' }}
             onClick={handlePreview}
-            disabled={exportMode === 'branch' && !selectedBranch}
+            disabled={exportMode !== 'full' && !anchorReady}
           >
             <Printer size={16} color="#FFFDF7" />
             <Text className="ml-2">生成打印预览</Text>
           </Button>
-          <Text className="block text-xs mt-2 text-center" style={{ color: canPrint(getAuthUser()) ? '#B0A090' : '#C0392B' }}>
-            {canPrint(getAuthUser()) ? '认证宗亲及以上可打印族谱' : '需认证宗亲身份后方可打印族谱'}
+          <Text className="block text-xs mt-2 text-center" style={{ color: canPrint(authUser) ? '#B0A090' : '#C0392B' }}>
+            {canPrint(authUser) ? '认证宗亲及以上可打印族谱' : '需认证宗亲身份后方可打印族谱'}
           </Text>
         </CardContent>
       </Card>

@@ -451,10 +451,10 @@ const ExportPreviewPage: React.FC = () => {
             <Text className="v-col">前言</Text>
             <Text className="v-col" style={{ color: '#8b2500' }}>卷首</Text>
             <Text className="v-col">一、家史</Text>
-            <Text className="v-col">二、家训家风</Text>
-            <Text className="v-col">三、字辈谱</Text>
-            <Text className="v-col">四、家族事记</Text>
-            <Text className="v-col">五、迁徙轨迹</Text>
+            <Text className="v-col">二、迁徙轨迹</Text>
+            <Text className="v-col">三、家训家风</Text>
+            <Text className="v-col">四、字辈谱</Text>
+            <Text className="v-col">五、家族事记</Text>
             <Text className="v-col" style={{ color: '#8b2500' }}>世系</Text>
             <Text className="v-col">{`第 ${sortedGens[0] || 1} — ${sortedGens[sortedGens.length - 1] || 1} 世`}</Text>
             <Text className="v-col">{`录入 ${bodyCount} 位`}</Text>
@@ -475,6 +475,18 @@ const ExportPreviewPage: React.FC = () => {
             })()}
           </View>
         </Sheet>
+
+        {/* ===== 迁徙轨迹（家史之后、家风家训之前） ===== */}
+        {migLines.length > 0 && (
+          <Sheet sidebar={sidebarText}>
+            <Text className="v-title block mb-4" style={{ fontSize: '38rpx' }}>迁徙轨迹</Text>
+            <View className="v-columns">
+              {migLines.map((ln, i) => (
+                <Text key={i} className="v-col">{toBox(ln)}</Text>
+              ))}
+            </View>
+          </Sheet>
+        )}
 
         {/* ===== 家训家风 ===== */}
         <Sheet sidebar={sidebarText}>
@@ -555,18 +567,6 @@ const ExportPreviewPage: React.FC = () => {
             </View>
           </Sheet>
         ))}
-
-        {/* ===== 迁徙轨迹 ===== */}
-        {migLines.length > 0 && (
-          <Sheet sidebar={sidebarText}>
-            <Text className="v-title block mb-4" style={{ fontSize: '38rpx' }}>迁徙轨迹</Text>
-            <View className="v-columns">
-              {migLines.map((ln, i) => (
-                <Text key={i} className="v-col">{toBox(ln)}</Text>
-              ))}
-            </View>
-          </Sheet>
-        )}
 
         {/* ===== 卷末 ===== */}
         <Sheet sidebar={sidebarText}>

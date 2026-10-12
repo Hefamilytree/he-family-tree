@@ -11,7 +11,7 @@ interface Props {
 
 const YEARS: number[] = [];
 const CUR_Y = new Date().getFullYear();
-for (let y = 1900; y <= CUR_Y + 5; y++) YEARS.push(y);
+for (let y = 1900; y <= CUR_Y + 10; y++) YEARS.push(y);
 const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const MINUTES = Array.from({ length: 12 }, (_, i) => i * 5);
