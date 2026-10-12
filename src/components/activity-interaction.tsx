@@ -4,6 +4,7 @@ import Taro from '@tarojs/taro'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Network } from '@/network'
+import { getAuthUser, permissionLevel } from '@/utils/permission'
 import { Users, MessageSquare, CornerDownRight, Trash2, UserCheck } from 'lucide-react-taro'
 
 interface RegItem {
@@ -59,6 +60,8 @@ export default function ActivityInteraction({ activityId }: Props) {
   const [replyDraft, setReplyDraft] = useState<Record<string, string>>({})
   const [openReply, setOpenReply] = useState<Record<string, boolean>>({})
   const [loaded, setLoaded] = useState(false)
+  // 是否具备报名/评论资格：认证宗亲（2级）及以上
+  const [canInteract, setCanInteract] = useState(false)
 
   const requireLogin = (): boolean => {
     const token = Taro.getStorageSync?.('token')
@@ -66,10 +69,16 @@ export default function ActivityInteraction({ activityId }: Props) {
       Taro.showToast({ title: '请先登录后再操作', icon: 'none' })
       return false
     }
+    // 报名 / 评论仅认证宗亲（2级）及以上
+    if (permissionLevel(getAuthUser()) < 2) {
+      Taro.showToast({ title: '请先完成宗亲认证后再操作', icon: 'none' })
+      return false
+    }
     return true
   }
 
   const loadAll = async () => {
+    setCanInteract(permissionLevel(getAuthUser()) >= 2)
     try {
       const [regRes, cmtRes] = await Promise.all([
         Network.request({
@@ -242,13 +251,15 @@ export default function ActivityInteraction({ activityId }: Props) {
           </View>
         ))}
 
-        <View
-          className="flex items-center gap-1"
-          onClick={() => setOpenReply({ ...openReply, [rootId]: !showBox })}
-        >
-          <MessageSquare size={13} color="#8B2500" />
-          <Text className="text-xs" style={{ color: '#8B2500' }}>{showBox ? '收起回复' : '写回复'}</Text>
-        </View>
+        {canInteract && (
+          <View
+            className="flex items-center gap-1"
+            onClick={() => setOpenReply({ ...openReply, [rootId]: !showBox })}
+          >
+            <MessageSquare size={13} color="#8B2500" />
+            <Text className="text-xs" style={{ color: '#8B2500' }}>{showBox ? '收起回复' : '写回复'}</Text>
+          </View>
+        )}
 
         {showBox && (
           <View className="mt-2">
@@ -275,7 +286,7 @@ export default function ActivityInteraction({ activityId }: Props) {
       <Button
         className="w-full rounded-full py-2"
         onClick={handleToggleRegister}
-        disabled={regBusy}
+        disabled={regBusy || !canInteract}
       >
         <View className="flex items-center justify-center gap-2 w-full">
           {registered ? (
@@ -286,7 +297,9 @@ export default function ActivityInteraction({ activityId }: Props) {
           ) : (
             <>
               <Users size={16} color="#FFFDF7" />
-              <Text className="text-sm text-white">{regBusy ? '处理中…' : '一键报名'}</Text>
+              <Text className="text-sm text-white">
+                {!canInteract ? '认证宗亲后可报名' : regBusy ? '处理中…' : '一键报名'}
+              </Text>
             </>
           )}
         </View>
@@ -322,17 +335,27 @@ export default function ActivityInteraction({ activityId }: Props) {
           评论{comments.length ? ` (${comments.length})` : ''}
         </Text>
 
-        <Textarea
-          value={commentText}
-          onInput={(e: any) => setCommentText(e.detail.value)}
-          maxlength={1000}
-          placeholder="友善发言，说点什么…（最多1000字）"
-        />
-        <View className="flex justify-end mt-1 mb-3">
-          <Button size="sm" onClick={submitComment}>
-            <Text className="text-xs">发表评论</Text>
-          </Button>
-        </View>
+        {canInteract ? (
+          <>
+            <Textarea
+              value={commentText}
+              onInput={(e: any) => setCommentText(e.detail.value)}
+              maxlength={1000}
+              placeholder="友善发言，说点什么…（最多1000字）"
+            />
+            <View className="flex justify-end mt-1 mb-3">
+              <Button size="sm" onClick={submitComment}>
+                <Text className="text-xs">发表评论</Text>
+              </Button>
+            </View>
+          </>
+        ) : (
+          <View className="mb-3 rounded-xl px-3 py-2" style={{ backgroundColor: '#F3E9DD' }}>
+            <Text className="block text-xs text-center" style={{ color: '#8B2500' }}>
+              完成宗亲认证后可发表评论与回复
+            </Text>
+          </View>
+        )}
 
         {loaded && comments.length === 0 && (
           <Text className="block text-xs mb-2" style={{ color: '#B0A090' }}>暂无评论，快来抢沙发～</Text>

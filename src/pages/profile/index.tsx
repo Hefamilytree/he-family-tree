@@ -51,6 +51,10 @@ const ProfilePage = () => {
   const [linkKeyword, setLinkKeyword] = useState('');
   const [linkPhone, setLinkPhone] = useState('');
   const [linkResidence, setLinkResidence] = useState('');
+  // 完善宗亲信息：现居住地（与申请加入家族一致的省市区联动选择器）
+  const [linkAddress, setLinkAddress] = useState<any>({
+    country: '中国', province: '', city: '', district: '', street: '', text: '',
+  });
   const [selectedMember, setSelectedMember] = useState<any>(null);
   const [linkGenerationTitle, setLinkGenerationTitle] = useState('');
   const [allMembers, setAllMembers] = useState<any[]>([]);
@@ -179,6 +183,16 @@ const ProfilePage = () => {
     setLinkKeyword('');
     setLinkPhone(userInfo?.phone || '');
     setLinkResidence(userInfo?.residence || '');
+    // 已有居住地文本则作为完整文本回显（历史数据未拆分省市区 code，AddressPicker 默认首省）
+    const existRes = (userInfo?.residence || '').trim();
+    setLinkAddress({
+      country: '中国',
+      province: '',
+      city: '',
+      district: '',
+      street: existRes,
+      text: existRes ? `中国 ${existRes}` : '',
+    });
     setSelectedMember(null);
     setLinkGenerationTitle('');
     setAllMembers([]);
@@ -228,9 +242,10 @@ const ProfilePage = () => {
       Taro.showToast({ title: '手机号码格式不正确', icon: 'none' });
       return;
     }
-    const residence = linkResidence.trim();
-    if (!residence) {
-      Taro.showToast({ title: '请填写现居住地', icon: 'none' });
+    // 现居住地：优先取省市区联动选择器的完整文本，兼容历史纯文本输入
+    const residence = (linkAddress?.text || linkResidence || '').trim();
+    if (!residence || (!linkAddress?.province && !(linkAddress?.street || '').trim())) {
+      Taro.showToast({ title: '请选择现居住地', icon: 'none' });
       return;
     }
     setLinking(true);
@@ -1235,11 +1250,13 @@ const ProfilePage = () => {
 
                 <View>
                   <Label><Text className="block text-sm text-stone-600 mb-1">现居住地（必填）</Text></Label>
-                  <Input
-                    className="bg-stone-50"
-                    placeholder="如：广东省深圳市·南山区"
-                    value={linkResidence}
-                    onInput={(e) => setLinkResidence(e.detail.value)}
+                  <AddressPicker
+                    value={linkAddress}
+                    streetPlaceholder="选填：街道/小区等详细地址"
+                    onChange={(v) => {
+                      setLinkAddress(v);
+                      setLinkResidence(v.text || '');
+                    }}
                   />
                 </View>
               </>

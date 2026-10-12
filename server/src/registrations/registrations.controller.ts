@@ -30,7 +30,7 @@ export class RegistrationsController {
     let viewer: { userId: string; role: string } | undefined;
     if (authorization) {
       try {
-        viewer = requireRole(this.authService, authorization, 1);
+        viewer = requireRole(this.authService, authorization, 2);
       } catch (e) {
         viewer = undefined;
       }
@@ -55,7 +55,7 @@ export class RegistrationsController {
     @Headers('authorization') authorization: string,
     @Res() res: Response,
   ) {
-    const decoded = requireRole(this.authService, authorization, 1);
+    const decoded = requireRole(this.authService, authorization, 2);
     const result = await this.registrationsService.register(
       body.activityId,
       decoded,
@@ -76,7 +76,7 @@ export class RegistrationsController {
     @Headers('authorization') authorization: string,
     @Res() res: Response,
   ) {
-    const decoded = requireRole(this.authService, authorization, 1);
+    const decoded = requireRole(this.authService, authorization, 2);
     const activityId = body?.activityId || queryActivityId;
     await this.registrationsService.cancel(activityId, decoded);
     return res.status(200).json({

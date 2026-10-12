@@ -32,7 +32,7 @@ export class CommentsController {
     let viewer: { userId: string; role: string } | undefined;
     if (authorization) {
       try {
-        viewer = requireRole(this.authService, authorization, 1);
+        viewer = requireRole(this.authService, authorization, 2);
       } catch (e) {
         viewer = undefined;
       }
@@ -54,7 +54,7 @@ export class CommentsController {
     @Headers('authorization') authorization: string,
     @Res() res: Response,
   ) {
-    const decoded = requireRole(this.authService, authorization, 1);
+    const decoded = requireRole(this.authService, authorization, 2);
     const content = (body.content || '').trim();
     if (!content) {
       return res
@@ -83,7 +83,7 @@ export class CommentsController {
     @Headers('authorization') authorization: string,
     @Res() res: Response,
   ) {
-    const decoded = requireRole(this.authService, authorization, 1);
+    const decoded = requireRole(this.authService, authorization, 2);
     await this.commentsService.remove(id, decoded);
     return res.status(200).json({ code: 200, msg: '删除成功', data: true });
   }

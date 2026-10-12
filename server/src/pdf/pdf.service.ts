@@ -351,29 +351,17 @@ export class PdfService {
       if (text) verticalText(text, `${shiName}家史`, '家史');
     }
 
-    // ===== 5. 迁徙轨迹（位于家史之后、家风家训之前；第X世 姓名 从XXX地迁徙至XXX地） =====
+    // ===== 5. 迁徙轨迹（位于家史之后、家风家训之前；与家史一致采用竖排排版） =====
+    // 句式：第X世 姓名 从XXX地迁徙至XXX地；每条记录独占一竖列，从右至左排布。
     {
       if (scopeMigrations.length) {
-        newPaper(`${shiName}迁徙轨迹`);
-        pageTitle('迁徙轨迹');
-        const maxW = RIGHT_X - M_LEFT;
-        let y = M_TOP + 90;
         const lines = scopeMigrations.map((mg: any) => {
           const genTxt = mg.generation ? `第${toChineseNum(mg.generation)}世` : '世数未详';
           const fromTxt = mg.from_place ? `${mg.from_place}地` : '';
           const toTxt = mg.to_place ? `${mg.to_place}地` : '';
-          return `${genTxt} ${mg.member_name || '未知'} 从${fromTxt}迁徙至${toTxt}`;
+          return `${genTxt}${mg.member_name || '未知'}从${fromTxt}迁徙至${toTxt}`;
         });
-        lines.forEach((ln: string) => {
-          const h = Math.max(30, doc.heightOfString(ln, { width: maxW }) + 12);
-          if (y + h > BOTTOM_Y) {
-            newPaper(`${shiName}迁徙轨迹`);
-            pageTitle('迁徙轨迹');
-            y = M_TOP + 90;
-          }
-          doc.fontSize(20).fillColor(INK).text(ln, M_LEFT + 6, y, { width: maxW });
-          y += h;
-        });
+        verticalText(lines.join('\n'), `${shiName}迁徙轨迹`, '迁徙轨迹');
       }
     }
 

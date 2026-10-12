@@ -262,7 +262,7 @@ const ExportPreviewPage: React.FC = () => {
         const genTxt = m.generation ? `第${toChineseNum(m.generation)}世` : '世数未详';
         const fromTxt = mg.from_place ? `${mg.from_place}地` : '';
         const toTxt = mg.to_place ? `${mg.to_place}地` : '';
-        migLines.push(`${genTxt} ${m.name} 从${fromTxt}迁徙至${toTxt}`);
+        migLines.push(`${genTxt}${m.name}从${fromTxt}迁徙至${toTxt}`);
       });
   });
 
