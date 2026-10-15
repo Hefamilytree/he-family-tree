@@ -1,42 +1,24 @@
-import { Injectable } from '@nestjs/common';
+﻿import { Injectable } from '@nestjs/common';
 import { createClient } from '@supabase/supabase-js';
-import { S3Storage } from 'coze-coding-dev-sdk';
 
 @Injectable()
 export class EconomicService {
   private supabase;
-  private storage: S3Storage;
 
   constructor() {
     this.supabase = createClient(
-      process.env.COZE_SUPABASE_URL!,
-      process.env.COZE_SUPABASE_SERVICE_ROLE_KEY!
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
-    this.storage = new S3Storage({
-      endpointUrl: process.env.COZE_BUCKET_ENDPOINT_URL,
-      accessKey: '',
-      secretKey: '',
-      bucketName: process.env.COZE_BUCKET_NAME,
-      region: 'cn-beijing',
-    });
   }
 
-  // 为 product 分类的图片 key 生成可访问的签名 URL
+  // 涓?product 鍒嗙被鐨勫浘鐗?key 鐢熸垚鍙闂殑绛惧悕 URL
   private async attachImageUrls(items: any[]): Promise<any[]> {
     if (!items || items.length === 0) return items;
     const result: any[] = [];
     for (const item of items) {
       const row = { ...item };
-      if (item.category === 'product' && item.image_url) {
-        try {
-          row.image_url = await this.storage.generatePresignedUrl({
-            key: item.image_url,
-            expireTime: 86400, // 1 天
-          });
-        } catch {
-          row.image_url = '';
-        }
-      }
+      // image_url 直接使用存储的值（本地或CDN地址）
       result.push(row);
     }
     return result;

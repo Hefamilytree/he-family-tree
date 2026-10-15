@@ -1,18 +1,16 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
-import { S3Storage } from 'coze-coding-dev-sdk';
+﻿import { Injectable, BadRequestException } from '@nestjs/common';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class UploadService {
-  private storage: S3Storage;
+  private uploadDir: string;
 
   constructor() {
-    this.storage = new S3Storage({
-      endpointUrl: process.env.COZE_BUCKET_ENDPOINT_URL,
-      accessKey: '',
-      secretKey: '',
-      bucketName: process.env.COZE_BUCKET_NAME,
-      region: 'cn-beijing',
-    });
+    this.uploadDir = path.resolve(process.cwd(), 'uploads');
+    if (!fs.existsSync(this.uploadDir)) {
+      fs.mkdirSync(this.uploadDir, { recursive: true });
+    }
   }
 
   async uploadImage(file: Express.Multer.File) {
@@ -20,29 +18,22 @@ export class UploadService {
       throw new BadRequestException('未选择文件');
     }
 
-    const content = file.path ? 
-      await require('fs').promises.readFile(file.path) :
-      file.buffer;
+    const content = file.path
+      ? await fs.promises.readFile(file.path)
+      : file.buffer;
 
     if (!content || content.length === 0) {
       throw new BadRequestException('文件内容为空');
     }
 
     const ext = (file.originalname || 'image.png').split('.').pop() || 'png';
-    const safeName = `products/product_${Date.now()}.${ext}`;
+    const filename = `product_${Date.now()}.${ext}`;
+    const filepath = path.join(this.uploadDir, filename);
 
-    const imageKey = await this.storage.uploadFile({
-      fileContent: content,
-      fileName: safeName,
-      contentType: file.mimetype || 'image/png',
-    });
+    await fs.promises.writeFile(filepath, content);
 
-    const imageUrl = await this.storage.generatePresignedUrl({
-      key: imageKey,
-      expireTime: 2592000,
-    });
-
-    console.log('图片上传成功:', { imageKey, imageUrl });
-    return { imageKey, imageUrl };
+    const imageUrl = `/uploads/${filename}`;
+    console.log('图片上传成功:', { imageUrl });
+    return { imageKey: filename, imageUrl };
   }
 }

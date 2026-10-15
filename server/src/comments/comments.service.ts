@@ -1,4 +1,4 @@
-import { Injectable, ForbiddenException } from '@nestjs/common';
+﻿import { Injectable, ForbiddenException } from '@nestjs/common';
 import { createClient } from '@supabase/supabase-js';
 
 interface DecodedUser {
@@ -12,12 +12,11 @@ export class CommentsService {
 
   constructor() {
     this.supabase = createClient(
-      process.env.COZE_SUPABASE_URL!,
-      process.env.COZE_SUPABASE_SERVICE_ROLE_KEY!,
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
   }
 
-  /** 解析用户姓名 / 世系 / 成员ID */
   private async resolveProfile(userId: string) {
     const { data: user } = await this.supabase
       .from('users')
@@ -41,16 +40,11 @@ export class CommentsService {
       memberName: member?.name || user.nickname || '宗亲',
       generationLabel:
         member?.generation != null
-          ? `第${member.generation}世`
+          ? `第${member.generation}代`
           : member?.generation_title || '',
     };
   }
 
-  /**
-   * 拉取某条活动的全部评论，组装为楼中楼：
-   *  - 主评论按时间倒序（最新在最上）。
-   *  - 回复依附在主评论下，按时间正序（楼内先回在前）。
-   */
   async findThread(targetType: string, targetId: string, viewer?: DecodedUser) {
     const { data, error } = await this.supabase
       .from('comments')
@@ -96,7 +90,6 @@ export class CommentsService {
     return roots.map((r) => ({ ...r, replies: repliesByRoot[r.id] || [] }));
   }
 
-  /** 发表主评论或回复 */
   async create(
     targetType: string,
     targetId: string,
@@ -119,7 +112,6 @@ export class CommentsService {
       if (!parent || parent.target_id !== targetId) {
         throw new ForbiddenException('回复的评论不存在');
       }
-      // 楼中楼：无论回复主评论还是回复某条回复，都归到同一主评论根下
       rootId = parent.root_id || parent.id;
       replyToName = parent.member_name || null;
     }
@@ -146,7 +138,6 @@ export class CommentsService {
     return data;
   }
 
-  /** 删除：本人可删自己的评论/回复；管理员可删任意评论 */
   async remove(id: string, user: DecodedUser) {
     const { data: target } = await this.supabase
       .from('comments')
@@ -160,7 +151,6 @@ export class CommentsService {
       throw new ForbiddenException('仅可删除本人发表的评论');
     }
 
-    // 删除主评论时，连带删除其全部楼中楼回复
     await this.supabase.from('comments').delete().eq('root_id', id);
     const { error } = await this.supabase.from('comments').delete().eq('id', id);
     if (error) throw error;

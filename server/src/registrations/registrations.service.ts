@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+﻿import { Injectable } from '@nestjs/common';
 import { createClient } from '@supabase/supabase-js';
 
 interface DecodedUser {
@@ -12,12 +12,12 @@ export class RegistrationsService {
 
   constructor() {
     this.supabase = createClient(
-      process.env.COZE_SUPABASE_URL!,
-      process.env.COZE_SUPABASE_SERVICE_ROLE_KEY!,
+      process.env.SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
   }
 
-  /** 取活动（含发布人），用于判定发布者/管理员权限 */
+  /** 鍙栨椿鍔紙鍚彂甯冧汉锛夛紝鐢ㄤ簬鍒ゅ畾鍙戝竷鑰?绠＄悊鍛樻潈闄?*/
   private async getActivity(activityId: string) {
     const { data } = await this.supabase
       .from('harmony_activities')
@@ -27,7 +27,7 @@ export class RegistrationsService {
     return data || null;
   }
 
-  /** 解析报名用户的姓名 / 世系 / 成员ID / 手机号 / openid */
+  /** 瑙ｆ瀽鎶ュ悕鐢ㄦ埛鐨勫鍚?/ 涓栫郴 / 鎴愬憳ID / 鎵嬫満鍙?/ openid */
   private async resolveUserProfile(userId: string) {
     const { data: user } = await this.supabase
       .from('users')
@@ -46,9 +46,9 @@ export class RegistrationsService {
       member = m;
     }
 
-    const memberName = member?.name || user.nickname || '宗亲';
+    const memberName = member?.name || user.nickname || '瀹椾翰';
     const generationLabel =
-      member?.generation != null ? `第${member.generation}世` : member?.generation_title || '';
+      member?.generation != null ? `第${member.generation}代` : member?.generation_title || '';
 
     return {
       memberId: member?.id || user.member_id || null,
@@ -59,7 +59,7 @@ export class RegistrationsService {
     };
   }
 
-  /** 当前用户对该活动的报名状态 */
+  /** 褰撳墠鐢ㄦ埛瀵硅娲诲姩鐨勬姤鍚嶇姸鎬?*/
   async getMyStatus(activityId: string, userId: string) {
     const { data } = await this.supabase
       .from('registrations')
@@ -71,10 +71,7 @@ export class RegistrationsService {
   }
 
   /**
-   * 报名名单：
-   *  - 普通宗亲：仅姓名 + 世系（隐藏手机号）。
-   *  - 活动发布人 / 家族管理员（super/admin）：完整名单（含手机号）。
-   */
+   * 鎶ュ悕鍚嶅崟锛?   *  - 鏅€氬畻浜诧細浠呭鍚?+ 涓栫郴锛堥殣钘忔墜鏈哄彿锛夈€?   *  - 娲诲姩鍙戝竷浜?/ 瀹舵棌绠＄悊鍛橈紙super/admin锛夛細瀹屾暣鍚嶅崟锛堝惈鎵嬫満鍙凤級銆?   */
   async findByActivity(activityId: string, viewer?: DecodedUser) {
     const { data, error } = await this.supabase
       .from('registrations')
@@ -104,7 +101,7 @@ export class RegistrationsService {
     });
   }
 
-  /** 报名：同一用户对同一活动仅一次（DB 唯一约束兜底） */
+  /** 鎶ュ悕锛氬悓涓€鐢ㄦ埛瀵瑰悓涓€娲诲姩浠呬竴娆★紙DB 鍞竴绾︽潫鍏滃簳锛?*/
   async register(activityId: string, user: DecodedUser, note?: string) {
     const existed = await this.getMyStatus(activityId, user.userId);
     if (existed) return { duplicated: true, data: existed };
@@ -129,7 +126,7 @@ export class RegistrationsService {
       .select()
       .single();
     if (error) {
-      // 并发下撞唯一约束
+      // 骞跺彂涓嬫挒鍞竴绾︽潫
       if (String(error.message).includes('duplicate')) {
         const mine = await this.getMyStatus(activityId, user.userId);
         return { duplicated: true, data: mine };
@@ -139,7 +136,7 @@ export class RegistrationsService {
     return { duplicated: false, data };
   }
 
-  /** 取消报名：仅本人可取消自己的报名 */
+  /** 鍙栨秷鎶ュ悕锛氫粎鏈汉鍙彇娑堣嚜宸辩殑鎶ュ悕 */
   async cancel(activityId: string, user: DecodedUser) {
     const { error } = await this.supabase
       .from('registrations')
